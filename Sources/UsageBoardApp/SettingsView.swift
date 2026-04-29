@@ -255,6 +255,16 @@ struct PluginSettingsView: View {
                     Spacer()
 
                     Button {
+                        NSWorkspace.shared.open(store.pluginsDirectoryURL)
+                    } label: {
+                        Image(systemName: "folder")
+                            .font(.system(size: 12))
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("打开插件文件夹")
+
+                    Button {
                         openPluginHelp()
                     } label: {
                         Image(systemName: "questionmark.circle")

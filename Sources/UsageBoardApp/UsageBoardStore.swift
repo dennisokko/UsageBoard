@@ -37,12 +37,12 @@ final class UsageBoardStore: ObservableObject {
             lastError = "配置加载失败：\(error.localizedDescription)"
         }
         if didLoadConfiguration {
-            do {
-                try installBundledPlugins()
-            } catch {
-                lastError = "内置插件安装失败：\(error.localizedDescription)"
-            }
             try? configStore.save(configuration) // persist generated stateIDs
+        }
+        do {
+            try installBundledPlugins()
+        } catch {
+            lastError = "内置插件安装失败：\(error.localizedDescription)"
         }
         rebuildSnapshots()
         loadCachedStates()
@@ -165,10 +165,12 @@ final class UsageBoardStore: ObservableObject {
     }
 
     func removePlugin(id: UUID) {
-        configuration.plugins.removeAll { $0.id == id }
+        guard let index = configuration.plugins.firstIndex(where: { $0.id == id }) else { return }
+        configuration.plugins.remove(at: index)
         snapshots.removeValue(forKey: id)
         refreshTasks[id]?.cancel()
         refreshTasks.removeValue(forKey: id)
+        saveConfiguration()
     }
 
     func refreshAll() {

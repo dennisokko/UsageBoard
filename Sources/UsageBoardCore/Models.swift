@@ -97,25 +97,21 @@ public struct PluginParameterMetadata: Codable, Equatable, Identifiable, Sendabl
 }
 
 public struct PluginMetadata: Codable, Equatable, Sendable {
-    public var schemaVersion: Int
     public var name: String?
     public var description: String?
     public var parameters: [PluginParameterMetadata]
 
     public init(
-        schemaVersion: Int = 1,
         name: String? = nil,
         description: String? = nil,
         parameters: [PluginParameterMetadata] = []
     ) {
-        self.schemaVersion = schemaVersion
         self.name = name
         self.description = description
         self.parameters = parameters
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion
         case name
         case description
         case parameters
@@ -123,7 +119,6 @@ public struct PluginMetadata: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         name = try container.decodeIfPresent(String.self, forKey: .name)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         parameters = try container.decodeIfPresent([PluginParameterMetadata].self, forKey: .parameters) ?? []
@@ -132,20 +127,17 @@ public struct PluginMetadata: Codable, Equatable, Sendable {
 
 public struct AppConfiguration: Codable, Equatable, Sendable {
     public var schemaVersion: Int
-    public var mainDisplayMode: DisplayMode
     public var overviewDisplayMode: DisplayMode
     public var plugins: [PluginConfiguration]
     public var launchAtLogin: Bool
 
     public init(
         schemaVersion: Int = 1,
-        mainDisplayMode: DisplayMode = .grouped,
         overviewDisplayMode: DisplayMode = .tabs,
         plugins: [PluginConfiguration] = [],
         launchAtLogin: Bool = false
     ) {
         self.schemaVersion = schemaVersion
-        self.mainDisplayMode = mainDisplayMode
         self.overviewDisplayMode = overviewDisplayMode
         self.plugins = plugins
         self.launchAtLogin = launchAtLogin
@@ -153,7 +145,6 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
-        case mainDisplayMode
         case overviewDisplayMode
         case plugins
         case launchAtLogin
@@ -162,7 +153,6 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-        mainDisplayMode = try container.decodeIfPresent(DisplayMode.self, forKey: .mainDisplayMode) ?? .grouped
         overviewDisplayMode = try container.decodeIfPresent(DisplayMode.self, forKey: .overviewDisplayMode) ?? .tabs
         plugins = try container.decodeIfPresent([PluginConfiguration].self, forKey: .plugins) ?? []
         launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
@@ -175,7 +165,6 @@ public struct PluginConfiguration: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var enabled: Bool
     public var executablePath: String
-    public var arguments: [String]
     public var refreshIntervalSeconds: Int
     public var metadata: PluginMetadata?
     public var parameterValues: [String: String]
@@ -186,7 +175,6 @@ public struct PluginConfiguration: Codable, Equatable, Identifiable, Sendable {
         name: String,
         enabled: Bool = true,
         executablePath: String,
-        arguments: [String] = [],
         refreshIntervalSeconds: Int = 300,
         metadata: PluginMetadata? = nil,
         parameterValues: [String: String] = [:]
@@ -196,7 +184,6 @@ public struct PluginConfiguration: Codable, Equatable, Identifiable, Sendable {
         self.name = name
         self.enabled = enabled
         self.executablePath = executablePath
-        self.arguments = arguments
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.metadata = metadata
         self.parameterValues = parameterValues
@@ -207,7 +194,6 @@ public struct PluginConfiguration: Codable, Equatable, Identifiable, Sendable {
         case name
         case enabled
         case executablePath
-        case arguments
         case refreshIntervalSeconds
         case metadata
         case parameterValues
@@ -220,7 +206,6 @@ public struct PluginConfiguration: Codable, Equatable, Identifiable, Sendable {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Untitled"
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         executablePath = try container.decodeIfPresent(String.self, forKey: .executablePath) ?? ""
-        arguments = try container.decodeIfPresent([String].self, forKey: .arguments) ?? []
         refreshIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? 300
         metadata = try container.decodeIfPresent(PluginMetadata.self, forKey: .metadata)
         parameterValues = try container.decodeIfPresent([String: String].self, forKey: .parameterValues) ?? [:]
@@ -228,12 +213,10 @@ public struct PluginConfiguration: Codable, Equatable, Identifiable, Sendable {
 }
 
 public struct PluginOutput: Decodable, Equatable, Sendable {
-    public var schemaVersion: Int
     public var updatedAt: Date
     public var items: [UsageItem]
 
-    public init(schemaVersion: Int = 1, updatedAt: Date, items: [UsageItem]) {
-        self.schemaVersion = schemaVersion
+    public init(updatedAt: Date, items: [UsageItem]) {
         self.updatedAt = updatedAt
         self.items = items
     }
@@ -338,12 +321,10 @@ public struct PluginSnapshot: Equatable, Identifiable, Sendable {
 }
 
 public struct PluginCachedState: Codable, Equatable, Sendable {
-    public var schemaVersion: Int
     public var updatedAt: Date
     public var items: [UsageItem]
 
-    public init(schemaVersion: Int = 1, updatedAt: Date, items: [UsageItem]) {
-        self.schemaVersion = schemaVersion
+    public init(updatedAt: Date, items: [UsageItem]) {
         self.updatedAt = updatedAt
         self.items = items
     }

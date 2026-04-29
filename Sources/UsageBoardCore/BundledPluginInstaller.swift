@@ -28,10 +28,17 @@ public struct BundledPluginInstaller: Sendable {
         var installed: [URL] = []
         for sourceURL in sourceFiles {
             let destinationURL = destinationDirectoryURL.appendingPathComponent(sourceURL.lastPathComponent)
-            guard !fileManager.fileExists(atPath: destinationURL.path) else { continue }
 
-            try fileManager.copyItem(at: sourceURL, to: destinationURL)
-            try? fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destinationURL.path)
+            if let existingDestination = try? fileManager.destinationOfSymbolicLink(atPath: destinationURL.path),
+               URL(fileURLWithPath: existingDestination).resolvingSymlinksInPath() == sourceURL.resolvingSymlinksInPath() {
+                continue
+            }
+
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+
+            try fileManager.createSymbolicLink(at: destinationURL, withDestinationURL: sourceURL)
             installed.append(destinationURL)
         }
         return installed

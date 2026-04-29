@@ -18,7 +18,7 @@ public struct PluginExecutor: Sendable {
 
         let process = Process()
         let executableURL = URL(fileURLWithPath: configuration.executablePath)
-        let pluginArguments = configuration.arguments + pluginParameterArguments(configuration: configuration)
+        let pluginArguments = pluginParameterArguments(configuration: configuration)
         if executableURL.pathExtension.lowercased() == "py" {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["python3", configuration.executablePath] + pluginArguments

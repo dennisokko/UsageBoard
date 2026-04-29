@@ -1,138 +1,174 @@
-# CLAUDE.md
+# UsageBoard 维护指南
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件同时作为 `CLAUDE.md` 使用，`CLAUDE.md` 是指向本文件的软链接。修改本文件即可同步给 Claude/Codex 类工具。
 
-## 基本约定
+## 工作约定
 
 - 默认使用中文沟通，表达简洁，结论可复制。
 - 改动保持小而清晰，每处改动都应对应当前请求。
-- 不读取、打印或提交真实 API Key、令牌或私有配置。
+- 动手前先说明涉及文件、计划和验证方式。
+- 执行命令前先说明为什么执行。
+- 不读取、打印或提交真实 API Key、Token、私有配置或用户数据。
 - 不擅自改无关代码；发现无关问题可以说明，但不要顺手处理。
-- 每次修改 app 代码后都重新构建并本地启动 app 验证，如已有运行中的 app 进程则先关闭。
+- 只改 `~/Library/Application Support/UsageBoard/plugins` 中的用户插件脚本时，不需要重新构建 app。
+- 修改 Swift app 代码、内置资源、打包脚本或 `dist/UsageBoard.app` 时，修改后需要构建、测试、签名并重启本地 app。
+- 如果 `UsageBoard` 已在运行，重启前先停止旧进程。
 
 ## 常用命令
 
 ```bash
-swift build                                          # 构建
-swift build -c release                               # Release 构建
-swift test                                           # 运行全部测试
-swift test --filter UsageBoardTests.testProgressHandlesBoundsAndRatio  # 运行单个测试
+swift build
+swift test
+swift build -c release
+bash scripts/build.sh
 ```
 
-打包本地测试 app：
+运行单个测试：
 
 ```bash
-cp .build/release/UsageBoard dist/UsageBoard.app/Contents/MacOS/UsageBoard
-codesign --force --deep --sign - dist/UsageBoard.app
+swift test --filter UsageBoardTests.testProgressHandlesBoundsAndRatio
 ```
 
-发布新版本：`bash scripts/release.sh`（自动版本号+1、构建、签名、打包、上传到服务器）。
+本地打包脚本：
+
+```bash
+bash scripts/build.sh
+```
+
+发布新版本：
+
+```bash
+bash scripts/release.sh
+bash scripts/release.sh 0.1.6
+```
+
+`scripts/release.sh` 会读取 `dist/UsageBoard.app/Contents/Info.plist` 中的当前版本，默认 patch +1，也可以显式传入版本号。脚本会构建、复制二进制和内置插件、签名、生成 zip 和 `version.json`，并上传到脚本中配置的服务器路径。发布脚本会临时把 `UsageBoardStore.swift` 中的 `__UPDATE_CHECK_URL__` 替换为线上 `version.json` 地址，结束后再恢复占位符。
 
 ## 项目结构
 
-- `Sources/UsageBoardCore`：核心逻辑（纯 Swift，无 SwiftUI 依赖）。
-- `Sources/UsageBoardApp`：SwiftUI macOS app（menu bar popover、主窗口 Dashboard、设置界面）。
-- `Tests/UsageBoardTests`：XCTest 测试。
-- `Resources/BundledPlugins/`：内置 Python 插件，首次启动自动安装到用户插件目录。
-- `Resources/PluginAuthoringGuide.html`：插件编写说明，从设置界面打开。
-- `scripts/release.sh`：发布脚本（构建、签名、打包、上传、远程清理）。
+- `Package.swift`：Swift Package 定义，macOS 13+，Swift 6 strict concurrency。
+- `Sources/UsageBoardCore/`：核心逻辑，无 SwiftUI 依赖。
+- `Sources/UsageBoardApp/`：SwiftUI + AppKit macOS app。
+- `Tests/UsageBoardTests/`：XCTest 单元测试。
+- `Resources/BundledPlugins/`：内置 Python 插件，打包进 app 后安装到用户插件目录。
+- `Resources/PluginAuthoringGuide.html`：插件编写说明，设置页插件列表右下角帮助按钮会打开它。
+- `Resources/UsageBoard.icns` 和 `Resources/UsageBoard.iconset/`：应用图标资源。
+- `scripts/build.sh`：本地 release 构建、签名并启动 app。
+- `scripts/release.sh`：发布脚本。
 - `dist/UsageBoard.app`：本地测试用 app bundle。
+- `dist/version.json`、`dist/UsageBoard-*.zip`：发布产物。
 
-AGENTS.md 内容与 CLAUDE.md 相同，修改任一文件后需同步另一个。
+## 运行时目录
 
-## 架构
+默认运行时数据位于：
 
-### 数据流
-
-```
-PluginConfiguration (持久化配置)
-       ↓
-PluginExecutor.run() → 启动子进程执行插件脚本 → 解析 stdout JSON
-       ↓
-PluginSnapshot (运行时状态: idle/loading/ready/failed)
-       ↓
-PluginStateStore → 缓存到磁盘 ~/Library/Application Support/UsageBoard/states/
-       ↓
-DashboardView / OverviewView → SwiftUI 展示
+```text
+~/Library/Application Support/UsageBoard/
 ```
 
-### 关键层次
+其中：
 
-- **UsageBoardStore**（App 层）：`@MainActor ObservableObject`，持有 `AppConfiguration` 和 `[UUID: PluginSnapshot]`。管理插件调度（定时刷新）、缓存加载、配置持久化。所有 UI 通过 `@ObservedObject var store` 访问数据。
-- **ConfigStore**（Core 层）：读写 JSON 配置文件 `~/Library/Application Support/UsageBoard/config.json`。
-- **PluginExecutor**（Core 层）：`Sendable` struct，`run()` 同步执行子进程并返回 `PluginSnapshot`。`.py` 脚本自动使用 `python3` 前缀。有超时机制（默认 15 秒）。
-- **PluginStateStore**（Core 层）：按 `stateID` 缓存 `PluginCachedState` 到独立 JSON 文件，用于判断是否需要刷新。
-- **PluginMetadataParser**（Core 层）：从插件脚本前 80 行的 `# UsageBoardPlugin:` / `# /UsageBoardPlugin` 注释块解析元数据。
+- `config.json`：主配置文件。
+- `plugins/`：用户插件目录。添加插件文件选择器默认打开这里。
+- `states/`：插件数据缓存目录，按插件 `stateID` 分文件保存。
 
-### Swift 并发
+当前内置插件安装逻辑由 `BundledPluginInstaller` 负责：启动时从 app 包 `Contents/Resources/Plugins/`，或开发环境的 `Resources/BundledPlugins/`，向用户 `plugins/` 目录创建同名符号链接。若目标同名文件不是指向当前内置插件的符号链接，当前实现会移除并重建符号链接。修改此行为时需要同步 README 和测试。
 
-项目使用 Swift 6 strict concurrency（`swiftLanguageModes: [.v6]`）。Core 层类型均为 `Sendable`，Core 的 Foundation import 使用 `@preconcurrency`。App 层的 `UsageBoardStore` 和 `AppDelegate` 标记 `@MainActor`。插件执行在 `Task.detached(priority: .utility)` 中运行。
+## 架构概览
 
-### JSON 约定
+数据流：
 
-所有 JSON 编解码通过 `UsageBoardJSON` 统一配置：ISO 8601 日期、pretty-printed + sorted keys 输出。所有 `Codable` 模型的 `init(from:)` 对缺失字段使用合理默认值而非崩溃。
+```text
+PluginConfiguration
+  -> PluginExecutor.run()
+  -> 插件进程 stdout JSON
+  -> PluginOutput / UsageItem
+  -> PluginSnapshot
+  -> PluginStateStore 缓存
+  -> DashboardView / OverviewView 展示
+```
 
-### App 运行模式
+关键类型：
 
-`AppDelegate` 管理 menu bar status item + NSPopover 弹出总览，设置界面通过独立 `NSWindow` 打开。`UsageBoardApplication.body` 仅提供 `Settings` scene。
+- `UsageBoardStore`：`@MainActor ObservableObject`。持有配置、快照、更新状态；管理插件调度、刷新、缓存加载、配置保存、内置插件安装、更新检查和更新安装。
+- `ConfigStore`：读写配置，提供配置目录、插件目录和状态目录路径。
+- `PluginExecutor`：执行插件。`.py` 文件用 `/usr/bin/env python3 <script>`，其他可执行文件直接运行。参数通过 `--usageboard-param KEY=value` 传入。默认超时 15 秒。
+- `PluginMetadataParser`：读取插件前 80 行中的 `UsageBoardPlugin` 注释块并解析元数据。
+- `PluginStateStore`：缓存插件成功返回的数据，用于启动展示和刷新间隔判断。
+- `BundledPluginInstaller`：安装内置插件到用户插件目录。
+- `UpdateChecker` / `UpdateDownloader` / `AppRelauncher`：检查更新、下载 zip、解压 app、退出后替换并重启。
 
-### 自动更新
+## 配置模型
 
-版本检查 URL 硬编码在 `UsageBoardStore` 中。`UpdateChecker` 从远程 `version.json` 比对版本号。更新流程：`UpdateDownloader` 下载 zip → `ditto -x -k` 解压 → `AppRelauncher` 生成临时 shell 脚本等待 app 退出后替换 bundle、重签名、重启。
-
-### 插件设置编辑
-
-插件详细配置使用 draft 机制：选中插件时将配置拷贝到 `@State draft`，编辑绑定指向 draft 而非 store。仅点"保存"时写回 store 并持久化。启用/禁用 toggle 和拖拽排序直接操作 store（即时生效）。
-
-## 插件协议
-
-- 插件统一优先使用 Python 脚本。
-- 主程序执行 `.py` 插件时使用 `python3 <script>`。
-- 插件配置项通过命令行参数传入：`--usageboard-param KEY=value`。
-- 插件不应读取本机隐藏配置文件或环境变量中的密钥；API Key 应通过 UsageBoard 设置界面配置。
-- 插件 stdout 必须输出主程序可解析的 JSON：
+当前 `AppConfiguration` JSON 字段：
 
 ```json
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-04-29T00:00:00Z",
-  "items": [
-    {
-      "id": "requests",
-      "name": "Requests",
-      "used": 1200,
-      "limit": 1500,
-      "displayStyle": "percent",
-      "resetAt": "2026-04-29T00:05:00Z",
-      "status": "normal"
-    }
-  ]
+  "overviewDisplayMode": "tabs",
+  "launchAtLogin": false,
+  "plugins": []
 }
 ```
 
-### 插件元数据
+当前 `PluginConfiguration` JSON 字段：
 
-插件脚本开头可用固定注释块声明配置项：
+```json
+{
+  "stateID": "stable-cache-id",
+  "name": "Example",
+  "enabled": false,
+  "executablePath": "/path/to/plugin.py",
+  "refreshIntervalSeconds": 300,
+  "metadata": null,
+  "parameterValues": {}
+}
+```
+
+`PluginConfiguration.id` 是运行时 UUID，不持久化；`stateID` 用于磁盘缓存。
+
+## 插件协议
+
+插件优先使用 Python 脚本。UsageBoard 执行 `.py` 插件时使用：
+
+```text
+/usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value
+```
+
+插件约定：
+
+- 不要从隐藏配置文件或环境变量读取密钥，除非这个文件路径本身是用户在 UsageBoard 中显式配置的参数。
+- 密钥类参数使用 `secret` 类型。
+- stdout 必须输出一个 JSON 对象。
+- stderr 可用于调试；退出码非 0、超时或 stdout 非法 JSON 会让插件卡片进入失败状态。
+
+插件元数据写在脚本前 80 行的注释块里：
 
 ```python
 # UsageBoardPlugin:
 # {
-#   "schemaVersion": 1,
 #   "name": "Example",
 #   "description": "示例插件",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
-#       "type": "string",
-#       "required": true
+#       "type": "secret",
+#       "required": true,
+#       "placeholder": "Service API Key"
 #     }
 #   ]
 # }
 # /UsageBoardPlugin
 ```
 
-支持的参数类型：`string`、`secret`、`integer`、`boolean`、`choice`。
+支持的参数类型：
+
+- `string`
+- `secret`
+- `integer`
+- `boolean`
+- `choice`
 
 `choice` 参数使用 `options`：
 
@@ -144,15 +180,67 @@ DashboardView / OverviewView → SwiftUI 展示
   "required": true,
   "defaultValue": "GLM",
   "options": [
-    { "label": "GLM", "value": "GLM" },
-    { "label": "ZAI", "value": "ZAI" }
+    { "label": "国内站", "value": "GLM" },
+    { "label": "国际站", "value": "ZAI" }
   ]
 }
 ```
 
+插件 stdout JSON：
+
+```json
+{
+  "updatedAt": "2026-04-29T00:00:00Z",
+  "items": [
+    {
+      "id": "requests",
+      "name": "Requests",
+      "used": 1200,
+      "limit": 1500,
+      "displayStyle": "ratio",
+      "resetAt": "2026-04-29T05:00:00Z",
+      "status": "normal",
+      "color": "blue"
+    }
+  ]
+}
+```
+
+字段说明：
+
+- `updatedAt`：ISO 8601 时间。
+- `items[].id`：稳定 ID。
+- `items[].name`：显示名称。
+- `items[].used` / `items[].limit`：进度按 `used / limit` 计算并限制在 `0...1`。
+- `items[].displayStyle`：`percent` 或 `ratio`。
+- `items[].resetAt`：可选 ISO 8601 时间，过期或缺失显示 `--`。
+- `items[].status`：`normal`、`warning`、`critical`、`unknown`。
+- `items[].color`：可选，支持 `blue`、`yellow`、`orange`、`red`、`green`，缺省蓝色。
+
+## 内置插件
+
+当前内置插件位于 `Resources/BundledPlugins/`：
+
+- `glm-usage-plugin.py`：智谱 Coding Plan 用量，Provider 支持 GLM/ZAI。
+- `minimax-usage-plugin.py`：MiniMax Coding Plan 用量。
+- `tavily-usage-plugin.py`：Tavily Search 月度用量。
+- `codex-usage-plugin.py`：OpenAI Codex CLI 用量配额。
+- `flowercloud-usage-plugin.py`：FlowerCloud 代理流量用量。
+
+修改内置插件后，如果只是验证用户插件目录中的脚本，不需要重建 app；如果要让改动进入 app 包或发布包，则需要重新构建/打包。
+
 ## UI 注意事项
 
-- 主界面和 menu bar 快速预览都应按内容高度自适应。
-- 内容少时不要留下大块空白。
-- 内容过多时限制最大高度并显示滚动条。
+- 主视图和 menu bar 快速预览都支持分组和标签页展示。
+- 内容少时不要留下大块空白；内容多时限制最大高度并显示滚动条。
+- 标签页切换时高度应随当前插件内容自适应。
+- 进度条高度接近文字行高，数值显示在进度条中间。
 - 用量行展示顺序和文案应稳定，避免刷新后跳动。
+- 设置页插件详情使用 draft 机制：编辑只改 `@State draft`，点击“保存”后才写回 store；启用/禁用和拖拽排序即时生效。
+
+## 验证建议
+
+- 改 Core 模型、解析、执行器或更新逻辑：运行 `swift test`。
+- 改 SwiftUI/AppKit UI：至少运行 `swift build`；重要交互改动用 `bash scripts/build.sh` 启动 app 手动检查。
+- 改内置插件：运行对应 Python mock/语法检查，并在需要进入 app 包时运行 `bash scripts/build.sh`。
+- 只改用户 `plugins/` 目录中的插件：运行该脚本的 Python 语法检查和 mock 测试即可，不需要重建 app。

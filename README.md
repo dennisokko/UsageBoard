@@ -1,41 +1,203 @@
 # UsageBoard
 
-macOS 菜单栏应用，聚合展示各类 API 和服务的用量配额。
+UsageBoard 是一个原生 macOS 菜单栏应用，用于聚合展示 API、模型服务、搜索服务、代理服务等各类用量配额。每个数据源都以插件形式存在，主程序负责定时执行插件、解析 stdout JSON，并以进度条展示用量。
 
-## 功能
+## 功能特性
 
-- 菜单栏常驻，点击图标快速预览用量
-- 主窗口分组或标签页展示详细数据
-- 插件架构，支持自定义数据源
-- 自动定时刷新，磁盘缓存离线可用
-- 支持开机启动
-- 内置自动更新
+- 菜单栏常驻，点击图标打开快速预览。
+- 支持分组展示和标签页展示。
+- 支持手动刷新、定时刷新、退出按钮。
+- 插件化用量查询，插件可独立配置刷新间隔和参数。
+- 插件设置界面从脚本元数据自动生成参数表单。
+- 新增插件默认不启用，启用前会检查必填参数。
+- 插件数据按 `stateID` 缓存到磁盘，启动后可展示上次成功数据。
+- 首次启动会把内置插件安装到用户插件目录。
+- 设置页支持开机启动、插件拖拽排序、插件帮助文档、检查更新和在线更新。
+- 用量展示支持百分比或数字占比，支持重置时间和进度条颜色。
 
 ## 内置插件
 
-| 插件 | 用途 |
-|------|------|
-| 智谱 GLM | 查询智谱 Coding Plan 用量 |
-| MiniMax | 查询 MiniMax Coding Plan 用量 |
-| OpenAI Codex | 查询 Codex CLI 用量配额 |
-| Tavily | 查询 Tavily Search 月度用量 |
-| FlowerCloud | 查询 FlowerCloud 代理用量 |
+| 插件 | 脚本 | 用途 |
+| --- | --- | --- |
+| 智谱 | `glm-usage-plugin.py` | 查询智谱 Coding Plan 用量，Provider 支持 GLM/ZAI |
+| MiniMax | `minimax-usage-plugin.py` | 查询 MiniMax Coding Plan 用量 |
+| Tavily | `tavily-usage-plugin.py` | 查询 Tavily Search 月度用量 |
+| Codex | `codex-usage-plugin.py` | 查询 OpenAI Codex CLI 用量配额 |
+| FlowerCloud | `flowercloud-usage-plugin.py` | 查询 FlowerCloud 代理流量用量 |
+
+内置插件源文件位于 [Resources/BundledPlugins](Resources/BundledPlugins)。打包后它们会位于 app 包的 `Contents/Resources/Plugins/`。
+
+## 运行时目录
+
+UsageBoard 默认使用：
+
+```text
+~/Library/Application Support/UsageBoard/
+```
+
+目录内容：
+
+- `config.json`：主配置文件。
+- `plugins/`：用户插件目录。添加插件时文件选择器默认打开这里。
+- `states/`：插件数据缓存目录。
+
+当前实现会在启动时向 `plugins/` 目录创建内置插件的同名符号链接，来源是 app 包内的 `Contents/Resources/Plugins/`，开发运行时则 fallback 到项目的 `Resources/BundledPlugins/`。
+
+## 配置文件
+
+主配置 JSON 当前结构：
+
+```json
+{
+  "schemaVersion": 1,
+  "overviewDisplayMode": "tabs",
+  "launchAtLogin": false,
+  "plugins": [
+    {
+      "stateID": "stable-cache-id",
+      "name": "Tavily",
+      "enabled": false,
+      "executablePath": "~/Library/Application Support/UsageBoard/plugins/tavily-usage-plugin.py",
+      "refreshIntervalSeconds": 300,
+      "metadata": null,
+      "parameterValues": {
+        "API_KEY": ""
+      }
+    }
+  ]
+}
+```
+
+说明：
+
+- `overviewDisplayMode` 支持 `grouped` 和 `tabs`。
+- `launchAtLogin` 控制开机启动。
+- `plugins[].stateID` 是插件缓存 ID，会持久化。
+- `plugins[].enabled` 为 `false` 时不执行插件。
+- `plugins[].metadata` 通常由插件脚本头部注释块解析生成。
+- `plugins[].parameterValues` 保存设置界面填写的插件参数。
+
+## 插件开发
+
+插件推荐使用 Python 脚本。主程序执行 `.py` 插件时使用：
+
+```text
+/usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value
+```
+
+插件必须向 stdout 输出 UsageBoard 可解析的 JSON。stderr 可用于调试；退出码非 0、超时或 stdout 非法 JSON 都会显示为插件错误。
+
+更完整的说明见 [插件编写说明](Resources/PluginAuthoringGuide.html)。
+
+### 参数元数据
+
+在脚本开头放入 `UsageBoardPlugin` 注释块，UsageBoard 会读取它并生成设置表单：
+
+```python
+#!/usr/bin/env python3
+# UsageBoardPlugin:
+# {
+#   "name": "Example",
+#   "description": "示例插件",
+#   "parameters": [
+#     {
+#       "name": "API_KEY",
+#       "label": "Api Key",
+#       "type": "secret",
+#       "required": true,
+#       "placeholder": "Service API Key"
+#     },
+#     {
+#       "name": "PROVIDER",
+#       "label": "Provider",
+#       "type": "choice",
+#       "required": true,
+#       "defaultValue": "GLM",
+#       "options": [
+#         {"label": "国内站", "value": "GLM"},
+#         {"label": "国际站", "value": "ZAI"}
+#       ]
+#     }
+#   ]
+# }
+# /UsageBoardPlugin
+```
+
+支持的参数类型：
+
+- `string`
+- `secret`
+- `integer`
+- `boolean`
+- `choice`
+
+插件读取参数示例：
+
+```python
+def parse_usageboard_params(argv):
+    values = {}
+    index = 0
+    while index < len(argv):
+        if argv[index] == "--usageboard-param" and index + 1 < len(argv):
+            key_value = argv[index + 1]
+            if "=" in key_value:
+                key, value = key_value.split("=", 1)
+                values[key] = value
+            index += 2
+        else:
+            index += 1
+    return values
+```
+
+### 返回数据格式
+
+```json
+{
+  "updatedAt": "2026-04-29T00:00:00Z",
+  "items": [
+    {
+      "id": "requests",
+      "name": "Requests",
+      "used": 1200,
+      "limit": 1500,
+      "displayStyle": "ratio",
+      "resetAt": "2026-04-29T05:00:00Z",
+      "status": "normal",
+      "color": "blue"
+    }
+  ]
+}
+```
+
+字段说明：
+
+- `updatedAt`：插件数据更新时间，ISO 8601 格式。
+- `items[].id`：用量项目稳定 ID。
+- `items[].name`：界面显示名称。
+- `items[].used` / `items[].limit`：已用量和总额度。
+- `items[].displayStyle`：`percent` 显示百分比，`ratio` 显示数字占比。
+- `items[].resetAt`：可选重置时间，ISO 8601 格式。
+- `items[].status`：`normal`、`warning`、`critical`、`unknown`。
+- `items[].color`：可选进度条颜色，支持 `blue`、`yellow`、`orange`、`red`、`green`，缺省蓝色。
 
 ## 系统要求
 
-- macOS 13.0+
-- Swift 6.3+
+运行：
 
-## 构建
+- macOS 13.0 或更高版本
+- 系统可用 `python3`，用于执行 Python 插件
+
+开发：
+
+- Xcode
+- Swift 6.3 toolchain
+
+## 构建与测试
+
+Debug 构建：
 
 ```bash
-swift build -c release
-```
-
-本地开发构建并启动：
-
-```bash
-bash scripts/build.sh
+swift build
 ```
 
 运行测试：
@@ -44,46 +206,79 @@ bash scripts/build.sh
 swift test
 ```
 
-## 插件开发
+Release 构建：
 
-插件为 Python 脚本，通过 stdout 输出 JSON 供主程序解析。在脚本开头用注释块声明参数元数据，即可在设置界面自动生成配置表单。
-
-详见 [插件编写说明](Resources/PluginAuthoringGuide.html)。
-
-### 输出格式
-
-```json
-{
-  "schemaVersion": 1,
-  "updatedAt": "2026-04-29T00:00:00Z",
-  "items": [
-    {
-      "id": "requests",
-      "name": "Requests",
-      "used": 1200,
-      "limit": 1500,
-      "displayStyle": "percent",
-      "resetAt": "2026-04-29T00:05:00Z",
-      "status": "normal"
-    }
-  ]
-}
+```bash
+swift build -c release
 ```
+
+本地构建、签名并启动 `dist/UsageBoard.app`：
+
+```bash
+bash scripts/build.sh
+```
+
+`scripts/build.sh` 会停止正在运行的 UsageBoard，构建 release，复制二进制和内置插件到 `dist/UsageBoard.app`，执行 ad-hoc 签名，然后启动 app。
+
+## 发布
+
+生成并上传新版本：
+
+```bash
+bash scripts/release.sh
+```
+
+指定版本：
+
+```bash
+bash scripts/release.sh 0.1.6
+```
+
+发布脚本会：
+
+1. 从 `dist/UsageBoard.app/Contents/Info.plist` 读取当前版本。
+2. 生成新版本号。
+3. 临时注入更新检查 URL。
+4. 构建 release。
+5. 复制二进制和内置插件。
+6. 重新签名并验证 app。
+7. 生成 `UsageBoard-<version>.zip`。
+8. 生成 `version.json`。
+9. 上传到脚本中配置的服务器路径。
+10. 清理远端旧 zip。
+11. 恢复源码中的更新 URL 占位符。
+
+当前发布产物示例：
+
+- `dist/UsageBoard-0.1.5.zip`
+- `dist/version.json`
 
 ## 项目结构
 
-```
+```text
 Sources/
-  UsageBoardCore/    核心逻辑（纯 Swift，无 SwiftUI 依赖）
-  UsageBoardApp/     macOS app（SwiftUI + AppKit）
+  UsageBoardCore/       配置、模型、插件执行、缓存、更新等核心逻辑
+  UsageBoardApp/        SwiftUI + AppKit macOS app
 Tests/
-  UsageBoardTests/   XCTest 测试
+  UsageBoardTests/      XCTest 单元测试
 Resources/
-  BundledPlugins/    内置插件
+  BundledPlugins/       内置 Python 插件
+  PluginAuthoringGuide.html
+  UsageBoard.icns
 scripts/
-  build.sh           本地构建并启动
-  release.sh         发布到服务器
+  build.sh              本地构建、签名、启动
+  release.sh            发布脚本
+dist/
+  UsageBoard.app        本地测试 app bundle
 ```
+
+## 开发注意事项
+
+- 修改 Swift app 代码、资源或打包脚本后，需要运行构建和测试；若影响 app 包，需要重新签名并重启 app。
+- 只修改用户插件目录中的脚本时，不需要重新构建 app。
+- 不要把真实 API Key、Token 或用户配置提交到仓库。
+- 插件参数中的密钥应通过 UsageBoard 设置界面传入，优先使用 `secret` 类型。
+- Core 层尽量保持无 SwiftUI 依赖，并满足 Swift 6 strict concurrency。
 
 ## 许可证
 

@@ -8,7 +8,6 @@ final class UsageBoardTests: XCTestCase {
         let data = #"{"plugins":[{"name":"A","executablePath":"/bin/echo"}]}"#.data(using: .utf8)!
         let configuration = try UsageBoardJSON.decoder().decode(AppConfiguration.self, from: data)
         XCTAssertEqual(configuration.schemaVersion, 1)
-        XCTAssertEqual(configuration.mainDisplayMode, .grouped)
         XCTAssertEqual(configuration.overviewDisplayMode, .tabs)
         XCTAssertEqual(configuration.plugins.first?.refreshIntervalSeconds, 300)
 
@@ -27,7 +26,7 @@ final class UsageBoardTests: XCTestCase {
         XCTAssertEqual(store.pluginsDirectoryURL(), directory.appendingPathComponent("plugins", isDirectory: true))
     }
 
-    func testBundledPluginInstallerCopiesMissingPluginsWithoutOverwriting() throws {
+    func testBundledPluginInstallerCreatesSymlinks() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
         let source = root.appendingPathComponent("source", isDirectory: true)
@@ -48,8 +47,9 @@ final class UsageBoardTests: XCTestCase {
         )
         .installIfNeeded()
 
-        XCTAssertEqual(installed.map(\.lastPathComponent), ["tavily-usage-plugin.py"])
-        XCTAssertEqual(try String(contentsOf: existing), "user-edited")
+        XCTAssertEqual(installed.map(\.lastPathComponent), ["glm-usage-plugin.py", "tavily-usage-plugin.py"])
+        let linkTarget = try FileManager.default.destinationOfSymbolicLink(atPath: existing.path)
+        XCTAssertEqual(URL(fileURLWithPath: linkTarget).resolvingSymlinksInPath(), bundled.resolvingSymlinksInPath())
         XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("tavily-usage-plugin.py")), "new")
     }
 
@@ -166,8 +166,7 @@ final class UsageBoardTests: XCTestCase {
     func testPluginExecutorReportsInvalidJSON() {
         let configuration = PluginConfiguration(
             name: "Bad",
-            executablePath: "/bin/echo",
-            arguments: ["not-json"]
+            executablePath: "/bin/echo"
         )
 
         let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Bad")
