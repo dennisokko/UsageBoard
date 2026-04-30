@@ -60,8 +60,14 @@ public enum UpdateError: Error, LocalizedError {
 public struct UpdateChecker: Sendable {
     public init() {}
 
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: config)
+    }()
+
     public func check(currentVersion: String, url: URL) async throws -> UpdateCheckResult {
-        let (data, _) = try await URLSession.shared.data(from: url)
+        let (data, _) = try await Self.session.data(from: url)
         let info = try UsageBoardJSON.decoder().decode(UpdateInfo.self, from: data)
         return UpdateCheckResult(info: info, hasUpdate: Self.isVersion(info.latestVersion, newerThan: currentVersion))
     }

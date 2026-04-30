@@ -26,12 +26,14 @@ echo "版本: $CURRENT_VERSION → $NEW_VERSION"
 # --- Release notes ---
 LAST_TAG=$(git tag --sort=-version:refname | head -1)
 if [ $# -ge 2 ]; then
-    NOTES="$2"
+    RAW_NOTES="$2"
 elif [ -n "$LAST_TAG" ]; then
-    NOTES=$(git log "${LAST_TAG}..HEAD" --format="- %s" 2>/dev/null || echo "")
+    RAW_NOTES=$(git log "${LAST_TAG}..HEAD" --format="- %s" 2>/dev/null || echo "")
 else
-    NOTES=""
+    RAW_NOTES=""
 fi
+# Escape newlines for JSON
+NOTES=$(echo "$RAW_NOTES" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip())[1:-1])')
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$PLIST"
 
