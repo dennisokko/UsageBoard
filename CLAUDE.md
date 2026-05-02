@@ -1,6 +1,8 @@
-# CLAUDE.md / AGENTS.md
+# CLAUDE.md
 
-本文件为 Claude Code (claude.ai/code) 和 Codex (codex.ai/code) 提供仓库工作指引。`AGENTS.md` 是指向本文件的软链接。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+`AGENTS.md` 是指向本文件的软链接，供 Codex 等工具使用。
 
 ## 工作约定
 
@@ -29,12 +31,6 @@ bash scripts/build.sh
 swift test --filter UsageBoardTests.testProgressHandlesBoundsAndRatio
 ```
 
-本地打包脚本：
-
-```bash
-bash scripts/build.sh
-```
-
 发布新版本：
 
 ```bash
@@ -42,7 +38,9 @@ bash scripts/release.sh
 bash scripts/release.sh 0.1.6
 ```
 
-`scripts/release.sh` 会读取 `dist/UsageBoard.app/Contents/Info.plist` 中的当前版本，默认 patch +1，也可以显式传入版本号。脚本会构建、复制二进制和内置插件、签名、生成 zip 和 `version.json`，并上传到脚本中配置的服务器路径。发布脚本会临时把 `UsageBoardStore.swift` 中的 `__UPDATE_CHECK_URL__` 替换为线上 `version.json` 地址，结束后再恢复占位符。自动生成的更新说明使用中文。
+`scripts/release.sh` 会读取 `dist/UsageBoard.app/Contents/Info.plist` 中的当前版本，默认 patch +1，也可以显式传入版本号。脚本会构建、复制二进制和内置插件、签名、生成 zip 和 `version.json`，并上传到脚本中配置的服务器路径。自动生成的更新说明使用中文。
+
+`scripts/build.sh` 和 `scripts/release.sh` 都通过 PlistBuddy 向 Info.plist 注入 `UBUpdateCheckURL` 字段，`UpdateChecker` 运行时从 Bundle 读取该字段作为更新检查地址。
 
 ## 项目结构
 
@@ -202,7 +200,8 @@ PluginConfiguration
       "status": "normal",
       "color": "blue"
     }
-  ]
+  ],
+  "badge": "PRO"
 }
 ```
 
@@ -216,6 +215,7 @@ PluginConfiguration
 - `items[].resetAt`：可选 ISO 8601 时间，过期或缺失显示 `--`。
 - `items[].status`：`normal`、`warning`、`critical`、`unknown`。
 - `items[].color`：可选，支持 `blue`、`yellow`、`orange`、`red`、`green`，缺省蓝色。
+- `badge`：可选字符串，显示在插件卡片标题旁的蓝色圆角徽章中（白色大写加粗文字）。用于显示订阅级别等信息。
 
 ## 内置插件
 
