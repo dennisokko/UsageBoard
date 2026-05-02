@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
-ENDPOINT = "https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains"
+ENDPOINT = "https://www.minimaxi.com/v1/token_plan/remains"
 SCHEMA_VERSION = 1
 
 
@@ -74,22 +74,24 @@ def fetch_remains(api_key: str) -> dict[str, Any]:
 def model_display_name(model_name: str) -> str:
     if model_name == "MiniMax-M*":
         return "文本生成"
-    if model_name == "coding-plan-search":
-        return "搜索"
     if model_name == "coding-plan-vlm":
         return "视觉"
+    if model_name == "coding-plan-search":
+        return "搜索"
+    if model_name.startswith("image-"):
+        return "图像"
     if model_name == "speech-hd":
         return "语音"
+    if model_name.startswith("MiniMax-Hailuo-") and "Fast" in model_name:
+        return "快速视频"
+    if model_name.startswith("MiniMax-Hailuo-"):
+        return "视频"
     if model_name == "music-cover":
         return "翻唱"
     if model_name == "lyrics_generation":
         return "歌词"
-    if model_name.startswith("image-"):
-        return "图像"
     if model_name.startswith("music-"):
-        return model_name.replace("music-", "音乐 v")
-    if model_name.startswith("MiniMax-Hailuo-"):
-        return model_name.replace("MiniMax-Hailuo-", "视频 v")
+        return "音乐"
     return model_name
 
 
@@ -157,6 +159,47 @@ def item(item_id: str, name: str, used: float, total: float, reset_at: str | Non
     }
 
 
+SORT_ORDER = [
+    "文本生成",
+    "视觉",
+    "搜索",
+    "图像",
+    "语音",
+    "视频",
+    "快速视频",
+    "音乐",
+    "翻唱",
+    "歌词",
+]
+
+
+PERIOD_ORDER = {"5小时": 0, "天": 1, "周": 2, "周期": 3}
+
+
+def sort_key(display_name: str) -> int:
+    for index, prefix in enumerate(SORT_ORDER):
+        if display_name.startswith(prefix):
+            return index
+    return len(SORT_ORDER)
+
+
+def item_sort_key(entry: dict[str, Any]) -> tuple[int, int]:
+    name = entry["name"]
+    prefix = name.split(" (")[0]
+    period_text = name.split("(")[-1].rstrip(")") if "(" in name else ""
+    return (sort_key(prefix), PERIOD_ORDER.get(period_text, 99))
+
+
+def is_weekly_redundant(model: dict[str, Any], interval_total: float, weekly_total: float) -> bool:
+    if interval_total <= 0:
+        return False
+    interval_ms = numeric(model.get("end_time")) - numeric(model.get("start_time"))
+    weekly_ms = numeric(model.get("weekly_end_time")) - numeric(model.get("weekly_start_time"))
+    if interval_ms <= 0 or weekly_ms <= 0:
+        return False
+    return weekly_ms / interval_ms <= weekly_total / interval_total
+
+
 IMAGE_PLAN_BADGES = {
     50: "Plus",
     120: "Max",
@@ -182,11 +225,9 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
         slug = raw_name.replace(" ", "-").replace("/", "-").lower()
 
         interval_total = numeric(model.get("current_interval_total_count"))
-        interval_remaining = numeric(model.get("current_interval_usage_count"))
-        interval_used = interval_total - interval_remaining
+        interval_used = numeric(model.get("current_interval_usage_count"))
         weekly_total = numeric(model.get("current_weekly_total_count"))
-        weekly_remaining = numeric(model.get("current_weekly_usage_count"))
-        weekly_used = weekly_total - weekly_remaining if weekly_total > 0 else 0
+        weekly_used = numeric(model.get("current_weekly_usage_count"))
 
         if raw_name == "image-01" and badge is None and interval_total > 0:
             badge = IMAGE_PLAN_BADGES.get(int(interval_total))
@@ -203,7 +244,7 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
                 )
             )
 
-        if weekly_total > 0:
+        if weekly_total > 0 and not is_weekly_redundant(model, interval_total, weekly_total):
             output.append(
                 item(
                     f"minimax-{slug}-week",
@@ -217,6 +258,7 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
     if badge is None:
         badge = "Starter"
 
+    output.sort(key=item_sort_key)
     return output, badge
 
 

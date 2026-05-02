@@ -7,3 +7,4 @@ DerivedData/
 .netrc
 /dist
 /.claude
+__pycache__/
