@@ -157,7 +157,13 @@ def item(item_id: str, name: str, used: float, total: float, reset_at: str | Non
     }
 
 
-PLAN_BADGES = {600: "Starter", 1500: "Plus", 4500: "Max"}
+IMAGE_PLAN_BADGES = {
+    50: "Plus",
+    120: "Max",
+    100: "Plus High",
+    200: "Max High",
+    800: "Ultra High",
+}
 
 
 def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
@@ -182,8 +188,8 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
         weekly_remaining = numeric(model.get("current_weekly_usage_count"))
         weekly_used = weekly_total - weekly_remaining if weekly_total > 0 else 0
 
-        if raw_name == "MiniMax-M*" and badge is None:
-            badge = PLAN_BADGES.get(int(interval_total))
+        if raw_name == "image-01" and badge is None and interval_total > 0:
+            badge = IMAGE_PLAN_BADGES.get(int(interval_total))
 
         if interval_total > 0:
             period = interval_label(model)
@@ -207,6 +213,9 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
                     reset_at_from_remaining_ms(model.get("weekly_remains_time")),
                 )
             )
+
+    if badge is None:
+        badge = "Starter"
 
     return output, badge
 
