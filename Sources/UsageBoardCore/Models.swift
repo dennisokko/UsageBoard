@@ -221,12 +221,64 @@ public struct PluginOutput: Decodable, Equatable, Sendable {
     public var updatedAt: Date
     public var items: [UsageItem]
     public var badge: String?
+    public var chart: PluginChart?
 
-    public init(updatedAt: Date, items: [UsageItem], badge: String? = nil) {
+    public init(updatedAt: Date, items: [UsageItem], badge: String? = nil, chart: PluginChart? = nil) {
         self.updatedAt = updatedAt
         self.items = items
         self.badge = badge
+        self.chart = chart
     }
+}
+
+public struct PluginChart: Codable, Equatable, Sendable {
+    public var kind: String
+    public var period: String
+    public var bucketUnit: String
+    public var buckets: [PluginChartBucket]
+    public var message: String?
+
+    public init(
+        kind: String = "line",
+        period: String,
+        bucketUnit: String,
+        buckets: [PluginChartBucket],
+        message: String? = nil
+    ) {
+        self.kind = kind
+        self.period = period
+        self.bucketUnit = bucketUnit
+        self.buckets = buckets
+        self.message = message
+    }
+}
+
+public struct PluginChartBucket: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var label: String
+    public var segments: [PluginChartSegment]
+
+    public init(id: String, label: String, segments: [PluginChartSegment]) {
+        self.id = id
+        self.label = label
+        self.segments = segments
+    }
+
+    public var total: Double {
+        segments.reduce(0) { $0 + max($1.tokens, 0) }
+    }
+}
+
+public struct PluginChartSegment: Codable, Equatable, Identifiable, Sendable {
+    public var model: String
+    public var tokens: Double
+
+    public init(model: String, tokens: Double) {
+        self.model = model
+        self.tokens = tokens
+    }
+
+    public var id: String { model }
 }
 
 public struct UsageItem: Codable, Equatable, Identifiable, Sendable {
@@ -311,6 +363,7 @@ public struct PluginSnapshot: Equatable, Identifiable, Sendable {
     public var updatedAt: Date?
     public var badge: String?
     public var iconURL: String?
+    public var chart: PluginChart?
 
     public init(
         id: UUID,
@@ -320,7 +373,8 @@ public struct PluginSnapshot: Equatable, Identifiable, Sendable {
         items: [UsageItem] = [],
         updatedAt: Date? = nil,
         badge: String? = nil,
-        iconURL: String? = nil
+        iconURL: String? = nil,
+        chart: PluginChart? = nil
     ) {
         self.id = id
         self.pluginName = pluginName
@@ -330,6 +384,7 @@ public struct PluginSnapshot: Equatable, Identifiable, Sendable {
         self.updatedAt = updatedAt
         self.badge = badge
         self.iconURL = iconURL
+        self.chart = chart
     }
 }
 
@@ -337,10 +392,12 @@ public struct PluginCachedState: Codable, Equatable, Sendable {
     public var updatedAt: Date
     public var items: [UsageItem]
     public var badge: String?
+    public var chart: PluginChart?
 
-    public init(updatedAt: Date, items: [UsageItem], badge: String? = nil) {
+    public init(updatedAt: Date, items: [UsageItem], badge: String? = nil, chart: PluginChart? = nil) {
         self.updatedAt = updatedAt
         self.items = items
         self.badge = badge
+        self.chart = chart
     }
 }

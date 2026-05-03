@@ -139,7 +139,8 @@ final class UsageBoardStore: ObservableObject {
             for: plugin,
             state: .loading,
             items: snapshots[plugin.id]?.items ?? [],
-            updatedAt: snapshots[plugin.id]?.updatedAt
+            updatedAt: snapshots[plugin.id]?.updatedAt,
+            chart: snapshots[plugin.id]?.chart
         )
         refresh(pluginID: id, force: true)
     }
@@ -156,13 +157,8 @@ final class UsageBoardStore: ObservableObject {
     }
 
     private func reloadAllMetadata() {
-        for index in configuration.plugins.indices {
-            let fileURL = URL(fileURLWithPath: configuration.plugins[index].executablePath)
-            let metadata = PluginMetadataParser.parse(fileURL: fileURL)
-            configuration.plugins[index].metadata = metadata
-            for parameter in metadata?.parameters ?? [] where configuration.plugins[index].parameterValues[parameter.name] == nil {
-                configuration.plugins[index].parameterValues[parameter.name] = parameter.defaultValue ?? ""
-            }
+        for plugin in configuration.plugins {
+            reloadMetadata(pluginID: plugin.id)
         }
     }
 
@@ -189,7 +185,8 @@ final class UsageBoardStore: ObservableObject {
                 for: plugin,
                 state: .loading,
                 items: snapshots[plugin.id]?.items ?? [],
-                updatedAt: snapshots[plugin.id]?.updatedAt
+                updatedAt: snapshots[plugin.id]?.updatedAt,
+                chart: snapshots[plugin.id]?.chart
             )
             return
         }
@@ -200,7 +197,8 @@ final class UsageBoardStore: ObservableObject {
             state: .loading,
             items: snapshots[plugin.id]?.items ?? [],
             updatedAt: snapshots[plugin.id]?.updatedAt,
-            badge: snapshots[plugin.id]?.badge
+            badge: snapshots[plugin.id]?.badge,
+            chart: snapshots[plugin.id]?.chart
         )
 
         let executor = executor
@@ -212,7 +210,12 @@ final class UsageBoardStore: ObservableObject {
             }.value
             snapshots[plugin.id] = snapshot
             if snapshot.state == .ready, let updatedAt = snapshot.updatedAt {
-                let cached = PluginCachedState(updatedAt: updatedAt, items: snapshot.items, badge: snapshot.badge)
+                let cached = PluginCachedState(
+                    updatedAt: updatedAt,
+                    items: snapshot.items,
+                    badge: snapshot.badge,
+                    chart: snapshot.chart
+                )
                 stateStore.save(stateID: plugin.stateID, state: cached)
             }
         }
@@ -310,7 +313,8 @@ final class UsageBoardStore: ObservableObject {
                 state: .ready,
                 items: cached.items,
                 updatedAt: cached.updatedAt,
-                badge: cached.badge
+                badge: cached.badge,
+                chart: cached.chart
             )
         }
     }
@@ -380,7 +384,8 @@ final class UsageBoardStore: ObservableObject {
         state: PluginSnapshotState = .idle,
         items: [UsageItem] = [],
         updatedAt: Date? = nil,
-        badge: String? = nil
+        badge: String? = nil,
+        chart: PluginChart? = nil
     ) -> PluginSnapshot {
         PluginSnapshot(
             id: plugin.id,
@@ -390,7 +395,8 @@ final class UsageBoardStore: ObservableObject {
             items: items,
             updatedAt: updatedAt,
             badge: badge,
-            iconURL: plugin.metadata?.icon
+            iconURL: plugin.metadata?.icon,
+            chart: chart
         )
     }
 
