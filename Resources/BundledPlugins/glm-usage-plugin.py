@@ -4,7 +4,7 @@
 #   "schemaVersion": 1,
 #   "name": "智谱",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/zhipu-color.png",
-#   "description": "查询智谱 / ZAI Coding Plan 用量和 token 统计",
+#   "description": "查询智谱 / ZAI Coding Plan 用量和统计",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",

@@ -4,7 +4,7 @@
 #   "schemaVersion": 1,
 #   "name": "Codex",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/codex-color.png",
-#   "description": "查询 OpenAI Codex CLI 用量配额",
+#   "description": "查询 OpenAI Codex CLI 用量和统计",
 #   "parameters": [
 #     {
 #       "name": "DATA_DIR",
