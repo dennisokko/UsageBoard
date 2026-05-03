@@ -560,7 +560,7 @@ struct TokenMetricView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .frame(width: 132, height: 58, alignment: .leading)
+        .frame(width: 150, height: 58, alignment: .leading)
         .contentShape(RoundedRectangle(cornerRadius: 6))
         .background(
             RoundedRectangle(cornerRadius: 6)
