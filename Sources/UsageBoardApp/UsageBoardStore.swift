@@ -11,6 +11,7 @@ final class UsageBoardStore: ObservableObject {
     @Published var updateMessage: String?
     @Published var availableUpdate: UpdateInfo?
     @Published var isUpdating: Bool = false
+    @Published var selectedTabID: UUID?
 
     private let configStore: ConfigStore
     private let stateStore: PluginStateStore

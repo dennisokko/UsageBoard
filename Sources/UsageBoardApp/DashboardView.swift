@@ -21,7 +21,6 @@ private final class IconImageCache: @unchecked Sendable {
 struct DashboardView: View {
     @ObservedObject var store: UsageBoardStore
     var mode: DisplayMode
-    @State private var selectedTabID: UUID?
 
     private var maxHeight: CGFloat {
         (NSScreen.main?.visibleFrame.height ?? 800) * 2 / 3
@@ -49,20 +48,37 @@ struct DashboardView: View {
                         .padding(10)
                     }
                 case .tabs:
-                    TabView(selection: tabSelection) {
-                        ForEach(enabledPlugins) { plugin in
-                            MeasuredScrollView(maxHeight: maxHeight - 40) {
-                                PluginGroupView(snapshot: store.snapshot(for: plugin)) {
-                                    store.refresh(pluginID: plugin.id, force: true)
+                    VStack(spacing: 0) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(enabledPlugins) { plugin in
+                                    Button {
+                                        store.selectedTabID = plugin.id
+                                    } label: {
+                                        Text(store.snapshot(for: plugin).displayName)
+                                            .font(.callout.weight(store.selectedTabID == plugin.id ? .semibold : .regular))
+                                            .foregroundStyle(store.selectedTabID == plugin.id ? .primary : .secondary)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 4)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .fill(store.selectedTabID == plugin.id ? Color(nsColor: .selectedControlColor) : .clear)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                    .padding(10)
                             }
-                            .tag(plugin.id)
-                            .tabItem { Text(store.snapshot(for: plugin).displayName) }
+                            .padding(.horizontal, 10)
+                        }
+                        .padding(.vertical, 6)
+                        Divider()
+                        if let plugin = selectedPlugin {
+                            PluginGroupView(snapshot: store.snapshot(for: plugin)) {
+                                store.refresh(pluginID: plugin.id, force: true)
+                            }
+                            .padding(10)
                         }
                     }
-                    .padding(.top, 8)
-                    .frame(height: tabViewHeight)
                 }
             }
         }
@@ -82,41 +98,24 @@ struct DashboardView: View {
         }
     }
 
-    private var tabSelection: Binding<UUID> {
-        Binding(
-            get: {
-                selectedPlugin?.id ?? enabledPlugins.first?.id ?? UUID()
-            },
-            set: { value in
-                selectedTabID = value
-            }
-        )
-    }
-
     private var selectedPlugin: PluginConfiguration? {
-        if let selectedTabID,
+        if let selectedTabID = store.selectedTabID,
            let plugin = enabledPlugins.first(where: { $0.id == selectedTabID }) {
             return plugin
         }
         return enabledPlugins.first
     }
 
-    private var tabViewHeight: CGFloat {
-        let selectedRows = max(selectedPlugin.map { store.snapshot(for: $0).items.count } ?? 1, 1)
-        let rowsHeight = CGFloat(selectedRows) * 26
-        return min(max(92 + rowsHeight, 150), maxHeight)
-    }
-
     private func ensureSelectedTab() {
         guard !enabledPlugins.isEmpty else {
-            selectedTabID = nil
+            store.selectedTabID = nil
             return
         }
-        if let selectedTabID,
+        if let selectedTabID = store.selectedTabID,
            enabledPlugins.contains(where: { $0.id == selectedTabID }) {
             return
         }
-        selectedTabID = enabledPlugins.first?.id
+        store.selectedTabID = enabledPlugins.first?.id
     }
 }
 
@@ -173,6 +172,7 @@ struct OverviewView: View {
 
 struct MeasuredScrollView<Content: View>: View {
     var maxHeight: CGFloat
+    var minHeight: CGFloat = 100
     @ViewBuilder var content: Content
     @State private var contentHeight: CGFloat = 0
 
@@ -185,7 +185,7 @@ struct MeasuredScrollView<Content: View>: View {
                     }
                 )
         }
-        .frame(height: contentHeight > 0 ? min(contentHeight, maxHeight) : maxHeight)
+        .frame(height: contentHeight > 0 ? min(max(contentHeight, minHeight), maxHeight) : minHeight)
         .onPreferenceChange(ContentHeightKey.self) { height in
             if height > 0 {
                 contentHeight = height
@@ -418,6 +418,9 @@ private struct CachedIconImage: View {
                 Image(systemName: "puzzlepiece.extension")
             }
         }
-        .task { image = await IconImageCache.shared.image(for: url) }
+        .task(id: url) {
+            image = nil
+            image = await IconImageCache.shared.image(for: url)
+        }
     }
 }
