@@ -50,7 +50,7 @@ bash scripts/release.sh 0.1.6
 - `Tests/UsageBoardTests/`：XCTest 单元测试。
 - `Resources/BundledPlugins/`：内置 Python 插件，打包进 app 后安装到用户插件目录。
 - `Resources/PluginAuthoringGuide.html`：插件编写说明，设置页插件列表右下角帮助按钮会打开它。
-- `Resources/UsageBoard.icns` 和 `Resources/UsageBoard.iconset/`：应用图标资源。
+- `Resources/UsageBoard.icns`：应用图标资源。
 - `scripts/build.sh`：本地 release 构建、签名并启动 app。
 - `scripts/release.sh`：发布脚本。
 - `dist/UsageBoard.app`：本地测试用 app bundle。
@@ -71,6 +71,8 @@ bash scripts/release.sh 0.1.6
 - `states/`：插件数据缓存目录，按插件 `stateID` 分文件保存。
 
 当前内置插件安装逻辑由 `BundledPluginInstaller` 负责：启动时从 app 包 `Contents/Resources/Plugins/`，或开发环境的 `Resources/BundledPlugins/`，向用户 `plugins/` 目录创建同名符号链接。若目标同名文件不是指向当前内置插件的符号链接，当前实现会移除并重建符号链接。修改此行为时需要同步 README 和测试。
+
+启动时 `reloadAllMetadata()` 会重新解析所有插件的 metadata（包括 `icon`、`description`、`parameters` 定义）并持久化到 config.json，同时为新参数填充默认值。用户通过 UI 设置的 `parameterValues` 不受影响。
 
 ## 架构概览
 
@@ -146,6 +148,7 @@ PluginConfiguration
 # UsageBoardPlugin:
 # {
 #   "name": "Example",
+#   "icon": "https://example.com/icon.png",
 #   "description": "示例插件",
 #   "parameters": [
 #     {
@@ -215,19 +218,21 @@ PluginConfiguration
 - `items[].resetAt`：可选 ISO 8601 时间，过期或缺失显示 `--`。
 - `items[].status`：`normal`、`warning`、`critical`、`unknown`。
 - `items[].color`：可选，支持 `blue`、`yellow`、`orange`、`red`、`green`，缺省蓝色。阈值基于**已用量百分比**：≥90% red，≥80% orange，≥60% yellow，<60% blue。
-- `badge`：可选字符串，显示在插件卡片标题旁的蓝色圆角徽章中（白色大写加粗文字）。用于显示订阅级别等信息。
+- `badge`：可选字符串，显示在插件卡片标题旁的黑色圆角徽章中（白色大写加粗文字）。用于显示订阅级别等信息。
+- `icon`：插件元数据中的可选字段，为图标图片 URL。显示在插件卡片标题前，无设置时显示默认拼图图标。图片通过 `NSCache` 内存缓存，首次加载后不再重复下载。
 
 ## 内置插件
 
 当前内置插件位于 `Resources/BundledPlugins/`：
 
 - `glm-usage-plugin.py`：智谱 Coding Plan 用量，Provider 支持 GLM/ZAI。
+- `deepseek-usage-plugin.py`：DeepSeek API 余额查询。
 - `minimax-usage-plugin.py`：MiniMax Coding Plan 用量，API 为 `token_plan/remains`。
 - `tavily-usage-plugin.py`：Tavily Search 月度用量。
 - `codex-usage-plugin.py`：OpenAI Codex CLI 用量配额。
 - `flowercloud-usage-plugin.py`：FlowerCloud 代理流量用量。
 
-修改内置插件后，如果只是验证用户插件目录中的脚本，不需要重建 app；如果要让改动进入 app 包或发布包，则需要重新构建/打包。
+用户插件目录中的符号链接指向 app 包中的插件文件，因此修改内置插件源文件后，必须运行 `bash scripts/build.sh` 重新构建才能让改动生效。
 
 ## UI 尺寸参考
 
@@ -241,11 +246,11 @@ PluginConfiguration
 - 标签页切换时高度应随当前插件内容自适应。
 - 进度条高度接近文字行高，数值显示在进度条中间。
 - 用量行展示顺序和文案应稳定，避免刷新后跳动。
-- 设置页插件详情使用 draft 机制：编辑只改 `@State draft`，点击“保存”后才写回 store；启用/禁用和拖拽排序即时生效。
+- 设置页插件详情使用 draft 机制：编辑只改 `@State draft`，点击”保存”后才写回 store；启用/禁用和拖拽排序即时生效。
+- `PluginSnapshot` 应通过 `UsageBoardStore.makeSnapshot()` 工厂方法创建，确保 `iconURL` 等字段一致传递；`PluginExecutor` 内部直接构造 snapshot 时也需传入 `configuration.metadata?.icon`。
 
 ## 验证建议
 
 - 改 Core 模型、解析、执行器或更新逻辑：运行 `swift test`。
 - 改 SwiftUI/AppKit UI：至少运行 `swift build`；重要交互改动用 `bash scripts/build.sh` 启动 app 手动检查。
-- 改内置插件：运行对应 Python mock/语法检查，并在需要进入 app 包时运行 `bash scripts/build.sh`。
-- 只改用户 `plugins/` 目录中的插件：运行该脚本的 Python 语法检查和 mock 测试即可，不需要重建 app。
+- 改内置插件：运行对应 Python 语法检查，修改源文件后需 `bash scripts/build.sh` 重建才能在 app 中生效。
