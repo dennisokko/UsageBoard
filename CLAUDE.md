@@ -214,7 +214,7 @@ PluginConfiguration
 - `items[].displayStyle`：`percent` 或 `ratio`。
 - `items[].resetAt`：可选 ISO 8601 时间，过期或缺失显示 `--`。
 - `items[].status`：`normal`、`warning`、`critical`、`unknown`。
-- `items[].color`：可选，支持 `blue`、`yellow`、`orange`、`red`、`green`，缺省蓝色。
+- `items[].color`：可选，支持 `blue`、`yellow`、`orange`、`red`、`green`，缺省蓝色。阈值基于**已用量百分比**：≥90% red，≥80% orange，≥60% yellow，<60% blue。
 - `badge`：可选字符串，显示在插件卡片标题旁的蓝色圆角徽章中（白色大写加粗文字）。用于显示订阅级别等信息。
 
 ## 内置插件
@@ -222,12 +222,17 @@ PluginConfiguration
 当前内置插件位于 `Resources/BundledPlugins/`：
 
 - `glm-usage-plugin.py`：智谱 Coding Plan 用量，Provider 支持 GLM/ZAI。
-- `minimax-usage-plugin.py`：MiniMax Coding Plan 用量。
+- `minimax-usage-plugin.py`：MiniMax Coding Plan 用量，API 为 `token_plan/remains`。
 - `tavily-usage-plugin.py`：Tavily Search 月度用量。
 - `codex-usage-plugin.py`：OpenAI Codex CLI 用量配额。
 - `flowercloud-usage-plugin.py`：FlowerCloud 代理流量用量。
 
 修改内置插件后，如果只是验证用户插件目录中的脚本，不需要重建 app；如果要让改动进入 app 包或发布包，则需要重新构建/打包。
+
+## UI 尺寸参考
+
+- 设置窗口：初始 780×560，最小 700×480，可调整大小（`UsageBoardApp.swift` `openSettings()`）。
+- Menu bar popover：内容自适应高度，最大为屏幕可见高度的 2/3。
 
 ## UI 注意事项
 
