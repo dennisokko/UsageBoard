@@ -19,6 +19,7 @@ swift build -c release
 echo "打包 app..."
 cp .build/release/UsageBoard "$APP_BUNDLE/Contents/MacOS/UsageBoard"
 mkdir -p "$APP_BUNDLE/Contents/Resources/Plugins"
+rm -f "$APP_BUNDLE/Contents/Resources/Plugins/"*.py
 cp "$PROJECT_DIR/Resources/UsageBoard.icns" "$APP_BUNDLE/Contents/Resources/UsageBoard.icns"
 cp "$PROJECT_DIR/Resources/PluginAuthoringGuide.html" "$APP_BUNDLE/Contents/Resources/PluginAuthoringGuide.html"
 cp "$PROJECT_DIR/Resources/BundledPlugins/"*.py "$APP_BUNDLE/Contents/Resources/Plugins/"
