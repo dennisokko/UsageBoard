@@ -38,7 +38,7 @@ bash scripts/release.sh
 bash scripts/release.sh 0.1.6
 ```
 
-`scripts/release.sh` 会读取 `dist/UsageBoard.app/Contents/Info.plist` 中的当前版本，默认 patch +1，也可以显式传入版本号。脚本会构建、复制二进制和内置插件、签名、生成 zip 和 `version.json`，并上传到脚本中配置的服务器路径。自动生成的更新说明使用中文。
+`scripts/release.sh` 会读取 `dist/UsageBoard.app/Contents/Info.plist` 中的当前版本，默认 patch +1，也可以显式传入版本号。脚本会构建、复制二进制和内置插件、签名、生成 zip 和 `version.json`，并上传到脚本中配置的服务器路径。自动生成的更新说明使用中文。发布后需手动创建 GitHub release：`git tag vX.Y.Z && git push origin vX.Y.Z`，然后 `gh release create vX.Y.Z dist/UsageBoard-X.Y.Z.zip --title "vX.Y.Z" --notes "更新说明"`。
 
 `scripts/build.sh` 和 `scripts/release.sh` 都通过 PlistBuddy 向 Info.plist 注入 `UBUpdateCheckURL` 字段，`UpdateChecker` 运行时从 Bundle 读取该字段作为更新检查地址。
 
@@ -241,11 +241,11 @@ PluginConfiguration
 
 当前内置插件位于 `Resources/BundledPlugins/`：
 
-- `glm-usage-plugin.py`：智谱 / ZAI Coding Plan 用量和 token 统计。
-- `deepseek-usage-plugin.py`：DeepSeek API 余额查询。
-- `minimax-usage-plugin.py`：MiniMax Coding Plan 用量，API 为 `token_plan/remains`。
+- `glm-usage-plugin.py`：智谱 / ZAI Coding Plan 用量和统计。通过 API Key 调用智谱国内站 `/api/monitor/usage/quota/limit` 和 `/api/monitor/usage/model-usage`。
+- `deepseek-usage-plugin.py`：DeepSeek API 余额查询。使用 `api.deepseek.com/user/balance`，仅需 API Key。
+- `minimax-usage-plugin.py`：MiniMax Coding Plan 用量。API 为 `minimaxi.com/v1/token_plan/remains`，无统计接口。
 - `tavily-usage-plugin.py`：Tavily Search 月度用量。
-- `codex-usage-plugin.py`：OpenAI Codex CLI 用量配额。
+- `codex-usage-plugin.py`：OpenAI Codex CLI 用量和统计。配额从 `chatgpt.com/backend-api/wham/usage` 获取（需 `auth.json` 中的 access_token），统计从本地 `~/.codex/sessions/` 和 `~/.codex/archived_sessions/` 解析 JSONL 文件。
 - `flowercloud-usage-plugin.py`：FlowerCloud 代理流量用量。
 
 用户插件目录中的符号链接指向 app 包中的插件文件，因此修改内置插件源文件后，必须运行 `bash scripts/build.sh` 重新构建才能让改动生效。
