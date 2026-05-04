@@ -236,7 +236,7 @@ def parse_usageboard_params(argv):
 - `chart.buckets[].segments[]`：每个时间桶的模型分段，包含 `model` 和 `tokens`。
 - `chart.message`：可选提示文案，统计数据为空或不可用时显示。
 
-内置智谱和 Codex 插件提供 `STAT_PERIOD` 参数，支持 `7d`、`30d`。智谱插件统一使用国内站 API 查询，兼容智谱和 ZAI 的 Coding Plan Key；旧配置中残留的 `PROVIDER` 参数会被忽略。Codex 插件从本地 `~/.codex/sessions/` 和 `~/.codex/archived_sessions/` 解析 JSONL 会话文件，按天按模型聚合 token 用量。
+内置智谱和 Codex 插件提供 `STAT_PERIOD` 参数，支持 `7d`、`30d`。智谱插件统一使用国内站 API 查询，兼容智谱和 ZAI 的 Coding Plan Key。Codex 插件通过 `DATA_DIR` 参数指定数据目录（默认 `~/.codex`），从中读取 `auth.json` 获取认证令牌，并解析 `sessions/` 和 `archived_sessions/` 下的 JSONL 会话文件，按天按模型聚合 token 用量。
 
 ## 系统要求
 

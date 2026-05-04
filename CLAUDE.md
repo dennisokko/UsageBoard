@@ -245,7 +245,7 @@ PluginConfiguration
 - `deepseek-usage-plugin.py`：DeepSeek API 余额查询。使用 `api.deepseek.com/user/balance`，仅需 API Key。
 - `minimax-usage-plugin.py`：MiniMax Coding Plan 用量。API 为 `minimaxi.com/v1/token_plan/remains`，无统计接口。
 - `tavily-usage-plugin.py`：Tavily Search 月度用量。
-- `codex-usage-plugin.py`：OpenAI Codex CLI 用量和统计。配额从 `chatgpt.com/backend-api/wham/usage` 获取（需 `auth.json` 中的 access_token），统计从本地 `~/.codex/sessions/` 和 `~/.codex/archived_sessions/` 解析 JSONL 文件。
+- `codex-usage-plugin.py`：OpenAI Codex CLI 用量和统计。`DATA_DIR` 参数指定数据目录（默认 `~/.codex`），从中读取 `auth.json` 获取 access_token 查询配额，并解析 `sessions/` 和 `archived_sessions/` 下的 JSONL 会话文件生成 token 统计。
 - `flowercloud-usage-plugin.py`：FlowerCloud 代理流量用量。
 
 用户插件目录中的符号链接指向 app 包中的插件文件，因此修改内置插件源文件后，必须运行 `bash scripts/build.sh` 重新构建才能让改动生效。
