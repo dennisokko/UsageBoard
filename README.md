@@ -282,6 +282,21 @@ UsageBoard 会额外传入当前 app 语言参数：`--usageboard-param USAGEBOA
 
 内置智谱和 Codex 插件提供 `STAT_PERIOD` 参数，支持 `7d`、`30d`。智谱插件统一使用国内站 API 查询，兼容智谱和 ZAI 的 Coding Plan Key。Codex 插件通过 `DATA_DIR` 参数指定数据目录（默认 `~/.codex`），从中读取 `auth.json` 获取认证令牌，并解析 `sessions/` 和 `archived_sessions/` 下的 JSONL 会话文件，按天按模型聚合 token 用量。
 
+## 安装
+
+通过 Homebrew 安装：
+
+```bash
+brew tap marsmay/usageboard
+brew install --cask usageboard
+```
+
+首次打开时，macOS 可能提示"无法验证开发者"。在"系统设置 → 隐私与安全性"中点击"仍要打开"，或在终端执行：
+
+```bash
+xattr -cr /Applications/UsageBoard.app
+```
+
 ## 系统要求
 
 运行：

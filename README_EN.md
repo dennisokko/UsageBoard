@@ -282,6 +282,21 @@ Field descriptions:
 
 The bundled Zhipu and Codex plugins provide a `STAT_PERIOD` parameter supporting `7d` and `30d`. The Zhipu plugin uses the domestic API endpoint and is compatible with both Zhipu and ZAI Coding Plan keys. The Codex plugin uses the `DATA_DIR` parameter to specify the data directory (default `~/.codex`), reads `auth.json` for authentication, and parses JSONL session files under `sessions/` and `archived_sessions/` to aggregate token usage by day and model.
 
+## Installation
+
+Install via Homebrew:
+
+```bash
+brew tap marsmay/usageboard
+brew install --cask usageboard
+```
+
+On first launch, macOS may show a "cannot verify developer" warning. Open **System Settings → Privacy & Security** and click **Open Anyway**, or run:
+
+```bash
+xattr -cr /Applications/UsageBoard.app
+```
+
 ## System Requirements
 
 Runtime:
