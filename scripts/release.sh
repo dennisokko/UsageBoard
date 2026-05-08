@@ -11,6 +11,24 @@ REMOTE_PATH="/data/web/blog/usageboard"
 DOWNLOAD_BASE_URL="https://may.ltd/usageboard"
 UPDATE_CHECK_URL="${DOWNLOAD_BASE_URL}/version.json"
 
+if [ ! -f "$PLIST" ]; then
+    mkdir -p "$(dirname "$PLIST")"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string zh_CN" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ltd.may.UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleInfoDictionaryVersion string 6.0" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleName string UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.1.0" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :LSApplicationCategoryType string 'public.app-category.productivity'" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 13.0" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :LSUIElement string true" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :NSPrincipalClass string NSApplication" "$PLIST"
+fi
+
 # --- Version handling ---
 CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
 
@@ -44,6 +62,7 @@ swift build -c release
 
 # --- Copy binary & plugins ---
 echo "打包 app..."
+mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources/Plugins"
 cp .build/release/UsageBoard "$APP_BUNDLE/Contents/MacOS/UsageBoard"
 mkdir -p "$APP_BUNDLE/Contents/Resources/Plugins"
 rm -f "$APP_BUNDLE/Contents/Resources/Plugins/"*.py

@@ -695,12 +695,12 @@ struct PluginSettingsCard: View {
             Text(label)
                 .font(.system(size: 13))
                 .lineLimit(1)
-                .frame(width: 120, alignment: .trailing)
+                .frame(width: 100, alignment: .trailing)
                 .foregroundStyle(.primary)
             value()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 10)
         .padding(.vertical, 10)
     }
 
@@ -733,12 +733,12 @@ struct PluginParameterField: View {
                             .foregroundStyle(.red)
                     }
                 }
-                .frame(width: 120, alignment: .trailing)
+                .frame(width: 100, alignment: .trailing)
                 input
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 10)
         .padding(.vertical, 10)
     }
 
