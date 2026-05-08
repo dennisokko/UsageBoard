@@ -54,10 +54,11 @@ UsageBoard is a native macOS menu bar app that aggregates and displays usage quo
 | Plugin | Script | Purpose |
 | --- | --- | --- |
 | Zhipu | `glm-usage-plugin.py` | Query Zhipu / ZAI Coding Plan usage and stats |
+| Claude | `claude-usage-plugin.py` | Query Claude subscription usage and stats |
+| Codex | `codex-usage-plugin.py` | Query OpenAI Codex CLI usage and stats |
 | MiniMax | `minimax-usage-plugin.py` | Query MiniMax Coding Plan usage |
 | DeepSeek | `deepseek-usage-plugin.py` | Query DeepSeek account balance |
 | Tavily | `tavily-usage-plugin.py` | Query Tavily Search monthly usage |
-| Codex | `codex-usage-plugin.py` | Query OpenAI Codex CLI usage and stats |
 
 Bundled plugin source files are in [Resources/BundledPlugins](Resources/BundledPlugins). After packaging, they reside in the app bundle at `Contents/Resources/Plugins/`.
 
@@ -280,7 +281,7 @@ Field descriptions:
 - `chart.buckets[].segments[]`: Per-bucket model segments with `model` and `tokens`.
 - `chart.message`: Optional message shown when stats data is empty or unavailable.
 
-The bundled Zhipu and Codex plugins provide a `STAT_PERIOD` parameter supporting `7d` and `30d`. The Zhipu plugin uses the domestic API endpoint and is compatible with both Zhipu and ZAI Coding Plan keys. The Codex plugin uses the `DATA_DIR` parameter to specify the data directory (default `~/.codex`), reads `auth.json` for authentication, and parses JSONL session files under `sessions/` and `archived_sessions/` to aggregate token usage by day and model.
+The bundled Zhipu and Codex plugins provide a `STAT_PERIOD` parameter supporting `7d` and `30d`. The Zhipu plugin uses the domestic API endpoint and is compatible with both Zhipu and ZAI Coding Plan keys. The Claude plugin fetches subscription usage via OAuth API and supports a `CLAUDE_ONLY` toggle to filter third-party models. The Codex plugin uses the `DATA_DIR` parameter to specify the data directory (default `~/.codex`), reads `auth.json` for authentication, and parses session files to generate token stats. Both Claude and Codex plugins use an incremental caching strategy stored in the data directory.
 
 ## Installation
 
@@ -348,7 +349,7 @@ bash scripts/release.sh
 Specify a version:
 
 ```bash
-bash scripts/release.sh 0.1.19
+bash scripts/release.sh 0.1.20
 ```
 
 The release script:
@@ -367,7 +368,7 @@ The release script:
 
 Current release artifacts:
 
-- `dist/UsageBoard-0.1.19.zip`
+- `dist/UsageBoard-0.1.20.zip`
 - `dist/version.json`
 
 ## Project Structure
