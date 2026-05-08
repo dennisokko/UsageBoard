@@ -81,6 +81,7 @@ UsageBoard 默认使用：
 ```json
 {
   "schemaVersion": 1,
+  "language": "zh-Hans",
   "overviewDisplayMode": "tabs",
   "launchAtLogin": false,
   "plugins": [
@@ -102,6 +103,7 @@ UsageBoard 默认使用：
 说明：
 
 - `overviewDisplayMode` 支持 `grouped` 和 `tabs`。
+- `language` 支持 `zh-Hans` 和 `en`，修改后重启生效。
 - `launchAtLogin` 控制开机启动。
 - `plugins[].stateID` 是插件缓存 ID，会持久化。
 - `plugins[].enabled` 为 `false` 时不执行插件。
@@ -131,10 +133,14 @@ UsageBoard 默认使用：
 #   "name": "Example",
 #   "icon": "https://example.com/icon.png",
 #   "description": "示例插件",
+#   "description@zh-Hans": "示例插件",
+#   "description@en": "Example plugin",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
+#       "label@zh-Hans": "Api Key",
+#       "label@en": "API Key",
 #       "type": "secret",
 #       "required": true,
 #       "placeholder": "Service API Key"
@@ -142,18 +148,22 @@ UsageBoard 默认使用：
 #     {
 #       "name": "STAT_PERIOD",
 #       "label": "统计周期",
+#       "label@zh-Hans": "统计周期",
+#       "label@en": "Stats Period",
 #       "type": "choice",
 #       "required": true,
 #       "defaultValue": "7d",
 #       "options": [
-#         {"label": "7 天", "value": "7d"},
-#         {"label": "30 天", "value": "30d"}
+#         {"label": "7 天", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+#         {"label": "30 天", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
 #       ]
 #     }
 #   ]
 # }
 # /UsageBoardPlugin
 ```
+
+涉及展示的插件元数据字段支持同级多语言字段，例如 `name@zh-Hans`、`name@en`、`description@zh-Hans`、`description@en`、`label@zh-Hans`、`label@en`、`placeholder@zh-Hans`、`placeholder@en`。当前语言对应字段缺失或为空时，UsageBoard 会回退到不带语言后缀的基础字段。
 
 支持的参数类型：
 
@@ -180,6 +190,8 @@ def parse_usageboard_params(argv):
             index += 1
     return values
 ```
+
+UsageBoard 会额外传入当前 app 语言参数：`--usageboard-param USAGEBOARD_LANGUAGE=zh-Hans` 或 `--usageboard-param USAGEBOARD_LANGUAGE=en`。脚本应读取这个保留参数，并直接返回对应语言的展示文本。
 
 ### 返回数据格式
 
