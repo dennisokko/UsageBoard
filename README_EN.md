@@ -90,13 +90,43 @@ Main configuration JSON structure:
   "plugins": [
     {
       "stateID": "stable-cache-id",
-      "name": "Tavily",
+      "name": "Example",
       "enabled": false,
-      "executablePath": "~/Library/Application Support/UsageBoard/plugins/tavily-usage-plugin.py",
+      "executablePath": "~/Library/Application Support/UsageBoard/plugins/example-plugin.py",
       "refreshIntervalSeconds": 300,
-      "metadata": null,
+      "metadata": {
+        "name": "Example",
+        "description": "Example plugin",
+        "description@zh-Hans": "示例插件",
+        "description@en": "Example plugin",
+        "parameters": [
+          {
+            "name": "API_KEY",
+            "label": "API Key",
+            "label@zh-Hans": "Api Key",
+            "label@en": "API Key",
+            "type": "secret",
+            "required": true,
+            "placeholder": "Service API Key"
+          },
+          {
+            "name": "STAT_PERIOD",
+            "label": "Stats Period",
+            "label@zh-Hans": "统计周期",
+            "label@en": "Stats Period",
+            "type": "choice",
+            "required": true,
+            "defaultValue": "7d",
+            "options": [
+              {"label": "7 days", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+              {"label": "30 days", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
+            ]
+          }
+        ]
+      },
       "parameterValues": {
-        "API_KEY": ""
+        "API_KEY": "",
+        "STAT_PERIOD": "7d"
       }
     }
   ]
@@ -118,7 +148,7 @@ Notes:
 Plugins are recommended to use Python scripts. UsageBoard executes `.py` plugins with:
 
 ```text
-/usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value
+/usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value --usageboard-param USAGEBOARD_LANGUAGE=en
 ```
 
 Plugins must output valid JSON to stdout. stderr can be used for debugging; non-zero exit codes, timeouts, or invalid JSON will show as plugin errors.

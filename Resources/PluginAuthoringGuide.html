@@ -126,7 +126,6 @@
   <pre><code>#!/usr/bin/env python3
 # UsageBoardPlugin:
 # {
-#   "schemaVersion": 1,
 #   "name": "Example",
 #   "description": "查询某个服务的用量",
 #   "description@zh-Hans": "查询某个服务的用量",
@@ -223,10 +222,9 @@ api_key = params.get("API_KEY", "")</code></pre>
   <p>UsageBoard 会额外传入当前 app 语言参数：<code>--usageboard-param USAGEBOARD_LANGUAGE=zh-Hans</code> 或 <code>--usageboard-param USAGEBOARD_LANGUAGE=en</code>。脚本应读取这个保留参数，并直接返回对应语言的展示文本。</p>
 
   <h2>返回数据格式</h2>
-  <p>插件输出的 JSON 顶层对象必须包含 <code>schemaVersion</code>、<code>updatedAt</code> 和 <code>items</code>。</p>
+  <p>插件输出的 JSON 顶层对象必须包含 <code>updatedAt</code> 和 <code>items</code>。</p>
 
   <pre><code>{
-  "schemaVersion": 1,
   "updatedAt": "2026-04-29T00:00:00Z",
   "items": [
     {

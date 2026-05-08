@@ -90,13 +90,43 @@ UsageBoard 默认使用：
   "plugins": [
     {
       "stateID": "stable-cache-id",
-      "name": "Tavily",
+      "name": "Example",
       "enabled": false,
-      "executablePath": "~/Library/Application Support/UsageBoard/plugins/tavily-usage-plugin.py",
+      "executablePath": "~/Library/Application Support/UsageBoard/plugins/example-plugin.py",
       "refreshIntervalSeconds": 300,
-      "metadata": null,
+      "metadata": {
+        "name": "Example",
+        "description": "示例插件",
+        "description@zh-Hans": "示例插件",
+        "description@en": "Example plugin",
+        "parameters": [
+          {
+            "name": "API_KEY",
+            "label": "Api Key",
+            "label@zh-Hans": "Api Key",
+            "label@en": "API Key",
+            "type": "secret",
+            "required": true,
+            "placeholder": "Service API Key"
+          },
+          {
+            "name": "STAT_PERIOD",
+            "label": "统计周期",
+            "label@zh-Hans": "统计周期",
+            "label@en": "Stats Period",
+            "type": "choice",
+            "required": true,
+            "defaultValue": "7d",
+            "options": [
+              {"label": "7 天", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+              {"label": "30 天", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
+            ]
+          }
+        ]
+      },
       "parameterValues": {
-        "API_KEY": ""
+        "API_KEY": "",
+        "STAT_PERIOD": "7d"
       }
     }
   ]
@@ -118,7 +148,7 @@ UsageBoard 默认使用：
 插件推荐使用 Python 脚本。主程序执行 `.py` 插件时使用：
 
 ```text
-/usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value
+/usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value --usageboard-param USAGEBOARD_LANGUAGE=zh-Hans
 ```
 
 插件必须向 stdout 输出 UsageBoard 可解析的 JSON。stderr 可用于调试；退出码非 0、超时或 stdout 非法 JSON 都会显示为插件错误。
