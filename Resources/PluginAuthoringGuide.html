@@ -129,10 +129,14 @@
 #   "schemaVersion": 1,
 #   "name": "Example",
 #   "description": "查询某个服务的用量",
+#   "description@zh-Hans": "查询某个服务的用量",
+#   "description@en": "Query usage for a service",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
+#       "label@zh-Hans": "Api Key",
+#       "label@en": "API Key",
 #       "type": "string",
 #       "required": true,
 #       "placeholder": "Service API Key"
@@ -140,17 +144,21 @@
 #     {
 #       "name": "STAT_PERIOD",
 #       "label": "统计周期",
+#       "label@zh-Hans": "统计周期",
+#       "label@en": "Stats Period",
 #       "type": "choice",
 #       "required": false,
 #       "defaultValue": "7d",
 #       "options": [
-#         {"label": "7 天", "value": "7d"},
-#         {"label": "30 天", "value": "30d"}
+#         {"label": "7 天", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+#         {"label": "30 天", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
 #       ]
 #     }
 #   ]
 # }
 # /UsageBoardPlugin</code></pre>
+
+  <p>涉及展示的插件元数据字段支持同级多语言字段，例如 <code>name@zh-Hans</code>、<code>name@en</code>、<code>description@zh-Hans</code>、<code>description@en</code>、<code>label@zh-Hans</code>、<code>label@en</code>、<code>placeholder@zh-Hans</code>、<code>placeholder@en</code>。当前语言对应字段缺失或为空时，UsageBoard 会回退到不带语言后缀的基础字段。</p>
 
   <h3>参数字段</h3>
   <table>
@@ -211,6 +219,8 @@ def parse_usageboard_params(argv):
 
 params = parse_usageboard_params(sys.argv[1:])
 api_key = params.get("API_KEY", "")</code></pre>
+
+  <p>UsageBoard 会额外传入当前 app 语言参数：<code>--usageboard-param USAGEBOARD_LANGUAGE=zh-Hans</code> 或 <code>--usageboard-param USAGEBOARD_LANGUAGE=en</code>。脚本应读取这个保留参数，并直接返回对应语言的展示文本。</p>
 
   <h2>返回数据格式</h2>
   <p>插件输出的 JSON 顶层对象必须包含 <code>schemaVersion</code>、<code>updatedAt</code> 和 <code>items</code>。</p>
