@@ -3,12 +3,18 @@
 # {
 #   "schemaVersion": 1,
 #   "name": "Tavily",
+#   "name@zh-Hans": "Tavily",
+#   "name@en": "Tavily",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/tavily-color.png",
 #   "description": "查询 Tavily Search 月度用量",
+#   "description@zh-Hans": "查询 Tavily Search 月度用量",
+#   "description@en": "Query Tavily Search monthly usage",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
+#       "label@zh-Hans": "Api Key",
+#       "label@en": "API Key",
 #       "type": "secret",
 #       "required": true,
 #       "placeholder": "Tavily API Key"
@@ -55,6 +61,59 @@ def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
 
 def get_api_key(argv: list[str]) -> str | None:
     return parse_usageboard_params(argv).get("API_KEY")
+
+
+def get_app_language(argv: list[str]) -> str:
+    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
+
+
+TRANSLATIONS = {
+    "total_usage": {
+        "zh-Hans": "总用量",
+        "en": "Total usage",
+    },
+    "search": {
+        "zh-Hans": "搜索",
+        "en": "Search",
+    },
+    "crawl": {
+        "zh-Hans": "爬取",
+        "en": "Crawl",
+    },
+    "extract": {
+        "zh-Hans": "提取",
+        "en": "Extract",
+    },
+    "map": {
+        "zh-Hans": "地图",
+        "en": "Map",
+    },
+    "research": {
+        "zh-Hans": "研究",
+        "en": "Research",
+    },
+    "query_failed_prefix": {
+        "zh-Hans": "Tavily 查询失败：",
+        "en": "Tavily query failed: ",
+    },
+    "missing_api_key": {
+        "zh-Hans": "请在插件设置中配置 Api Key",
+        "en": "Configure Api Key in plugin settings",
+    },
+    "no_quota_items": {
+        "zh-Hans": "响应中没有可识别的配额项",
+        "en": "No recognizable quota items in response",
+    },
+    "request_timeout": {
+        "zh-Hans": "请求超时",
+        "en": "Request timed out",
+    },
+}
+
+
+def translate(language: str, key: str) -> str:
+    values = TRANSLATIONS.get(key, {})
+    return values.get(language) or values.get("zh-Hans") or key
 
 
 def fetch_usage(api_key: str) -> dict[str, Any]:
@@ -114,7 +173,7 @@ def item(item_id: str, name: str, used: float, total: float, color: str = "blue"
     }
 
 
-def build_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def build_items(payload: dict[str, Any], language: str) -> list[dict[str, Any]]:
     account = payload.get("account", {})
     if not isinstance(account, dict):
         return []
@@ -127,7 +186,7 @@ def build_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     output = [
         item(
             "tavily-total-month",
-            "总用量",
+            translate(language, "total_usage"),
             plan_usage,
             plan_limit,
             color_for(plan_usage, plan_limit),
@@ -136,16 +195,16 @@ def build_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
     details = [
-        ("tavily-search", "搜索", "search_usage"),
-        ("tavily-crawl", "爬取", "crawl_usage"),
-        ("tavily-extract", "提取", "extract_usage"),
-        ("tavily-map", "地图", "map_usage"),
-        ("tavily-research", "研究", "research_usage"),
+        ("tavily-search", "search", "search_usage"),
+        ("tavily-crawl", "crawl", "crawl_usage"),
+        ("tavily-extract", "extract", "extract_usage"),
+        ("tavily-map", "map", "map_usage"),
+        ("tavily-research", "research", "research_usage"),
     ]
-    for item_id, name, key in details:
-        used = numeric(account.get(key))
+    for item_id, name_key, usage_key in details:
+        used = numeric(account.get(usage_key))
         if used > 0:
-            output.append(item(item_id, name, used, plan_usage))
+            output.append(item(item_id, translate(language, name_key), used, plan_usage))
 
     return output
 
@@ -155,7 +214,7 @@ def success(items: list[dict[str, Any]]) -> int:
     return 0
 
 
-def failure(message: str) -> int:
+def failure(message: str, language: str) -> int:
     print(
         json.dumps(
             {
@@ -164,7 +223,7 @@ def failure(message: str) -> int:
                 "items": [
                     {
                         "id": "tavily-error",
-                        "name": f"Tavily 查询失败：{message}",
+                        "name": f"{translate(language, 'query_failed_prefix')}{message}",
                         "used": 0,
                         "limit": 1,
                         "displayStyle": "percent",
@@ -181,22 +240,23 @@ def failure(message: str) -> int:
 
 def main() -> int:
     api_key = get_api_key(sys.argv[1:])
+    language = get_app_language(sys.argv[1:])
     if not api_key:
-        return failure("请在插件设置中配置 Api Key")
+        return failure(translate(language, "missing_api_key"), language)
 
     try:
-        items = build_items(fetch_usage(api_key))
+        items = build_items(fetch_usage(api_key), language)
         if not items:
-            return failure("响应中没有可识别的配额项")
+            return failure(translate(language, "no_quota_items"), language)
         return success(items)
     except urllib.error.HTTPError as error:
-        return failure(f"HTTP {error.code}")
+        return failure(f"HTTP {error.code}", language)
     except urllib.error.URLError as error:
-        return failure(str(error.reason))
+        return failure(str(error.reason), language)
     except TimeoutError:
-        return failure("请求超时")
+        return failure(translate(language, "request_timeout"), language)
     except Exception as error:
-        return failure(str(error))
+        return failure(str(error), language)
 
 
 if __name__ == "__main__":

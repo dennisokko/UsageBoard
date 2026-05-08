@@ -3,12 +3,18 @@
 # {
 #   "schemaVersion": 1,
 #   "name": "DeepSeek",
+#   "name@zh-Hans": "DeepSeek",
+#   "name@en": "DeepSeek",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/deepseek-color.png",
 #   "description": "查询 DeepSeek API 余额",
+#   "description@zh-Hans": "查询 DeepSeek API 余额",
+#   "description@en": "Query DeepSeek API balance",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
+#       "label@zh-Hans": "Api Key",
+#       "label@en": "API Key",
 #       "type": "secret",
 #       "required": true,
 #       "placeholder": "DeepSeek API Key"
@@ -51,7 +57,28 @@ def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
     return values
 
 
-def fetch_balance(api_key: str) -> list[dict]:
+def app_language(params: dict[str, str]) -> str:
+    return "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
+
+
+TRANSLATIONS = {
+    "balance": {
+        "zh-Hans": "余额",
+        "en": "Balance",
+    },
+    "missing_api_key": {
+        "zh-Hans": "缺少 API_KEY 参数",
+        "en": "Missing API_KEY parameter",
+    },
+}
+
+
+def translate(language: str, key: str) -> str:
+    values = TRANSLATIONS.get(key, {})
+    return values.get(language) or values.get("zh-Hans") or key
+
+
+def fetch_balance(api_key: str, language: str) -> list[dict]:
     request = urllib.request.Request(
         ENDPOINT,
         headers={
@@ -71,7 +98,7 @@ def fetch_balance(api_key: str) -> list[dict]:
         color = "red" if total_balance <= 10 else "orange" if total_balance <= 20 else "yellow" if total_balance <= 40 else None
         items.append({
             "id": f"balance-{currency}",
-            "name": f"余额{suffix}",
+            "name": f"{translate(language, 'balance')}{suffix}",
             "used": round(total_balance, 2),
             "limit": round(limit, 2),
             "displayStyle": "ratio",
@@ -83,13 +110,14 @@ def fetch_balance(api_key: str) -> list[dict]:
 
 def main() -> None:
     params = parse_usageboard_params(sys.argv[1:])
+    language = app_language(params)
     api_key = params.get("API_KEY", "")
     if not api_key:
-        print(json.dumps({"error": "缺少 API_KEY 参数"}))
+        print(json.dumps({"error": translate(language, "missing_api_key")}))
         sys.exit(1)
 
     try:
-        items = fetch_balance(api_key)
+        items = fetch_balance(api_key, language)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         print(json.dumps({"error": f"HTTP {e.code}: {body}"}))

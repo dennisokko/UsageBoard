@@ -3,12 +3,17 @@
 # {
 #   "schemaVersion": 1,
 #   "name": "智谱",
+#   "name@zh-Hans": "智谱",
+#   "name@en": "Zhipu",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/zhipu-color.png",
-#   "description": "查询智谱 / ZAI Coding Plan 用量和统计",
+#   "description": "查询智谱 / ZAI Coding Plan 用量和 token 统计",
+#   "description@zh-Hans": "查询智谱 / ZAI Coding Plan 用量和 token 统计",
+#   "description@en": "Query Zhipu / ZAI Coding Plan usage and token stats",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
+#       "label@zh-Hans": "Api Key",
 #       "type": "secret",
 #       "required": true,
 #       "placeholder": "Coding Plan API Key"
@@ -16,12 +21,14 @@
 #     {
 #       "name": "STAT_PERIOD",
 #       "label": "统计周期",
+#       "label@zh-Hans": "统计周期",
+#       "label@en": "Stats Period",
 #       "type": "choice",
 #       "required": true,
 #       "defaultValue": "7d",
 #       "options": [
-#         {"label": "7 天", "value": "7d"},
-#         {"label": "30 天", "value": "30d"}
+#         {"label": "7 天", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+#         {"label": "30 天", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
 #       ]
 #     }
 #   ]
@@ -74,6 +81,75 @@ def get_stat_period(argv: list[str]) -> str:
     params = parse_usageboard_params(argv)
     period = params.get("STAT_PERIOD", "7d").lower()
     return period if period in ("7d", "30d") else "7d"
+
+
+def get_app_language(argv: list[str]) -> str:
+    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
+
+
+TRANSLATIONS = {
+    "period_5h": {
+        "zh-Hans": "5小时",
+        "en": "5 hours",
+    },
+    "period_week": {
+        "zh-Hans": "周",
+        "en": "week",
+    },
+    "period_month": {
+        "zh-Hans": "月",
+        "en": "month",
+    },
+    "tool_calls": {
+        "zh-Hans": "工具调用",
+        "en": "Tool calls",
+    },
+    "text_generation": {
+        "zh-Hans": "文本生成",
+        "en": "Text generation",
+    },
+    "five_hour_usage": {
+        "zh-Hans": "5 小时用量",
+        "en": "5-hour usage",
+    },
+    "weekly_usage": {
+        "zh-Hans": "周用量",
+        "en": "Weekly usage",
+    },
+    "mcp_month_usage": {
+        "zh-Hans": "MCP 月用量",
+        "en": "MCP monthly usage",
+    },
+    "no_stats_data": {
+        "zh-Hans": "暂无可用统计数据",
+        "en": "No stats data available",
+    },
+    "query_failed_prefix": {
+        "zh-Hans": "GLM 查询失败：",
+        "en": "GLM query failed: ",
+    },
+    "missing_api_key": {
+        "zh-Hans": "请在插件设置中配置 Api Key",
+        "en": "Configure Api Key in plugin settings",
+    },
+    "no_quota_items": {
+        "zh-Hans": "响应中没有可识别的配额项",
+        "en": "No recognizable quota items in response",
+    },
+    "stats_query_failed": {
+        "zh-Hans": "统计数据查询失败",
+        "en": "Failed to query stats data",
+    },
+    "request_timeout": {
+        "zh-Hans": "请求超时",
+        "en": "Request timed out",
+    },
+}
+
+
+def translate(language: str, key: str) -> str:
+    values = TRANSLATIONS.get(key, {})
+    return values.get(language) or values.get("zh-Hans") or key
 
 
 def fetch_limits(api_key: str) -> dict[str, Any]:
@@ -189,30 +265,30 @@ def usage_from_current_and_limit(limit: dict[str, Any]) -> tuple[float, float]:
     return max(float(current), 0), max(float(usage_limit), 0)
 
 
-def period_for(limit: dict[str, Any]) -> tuple[str, str] | None:
+def period_for(limit: dict[str, Any], language: str) -> tuple[str, str] | None:
     unit = limit.get("unit")
     number = limit.get("number")
     if unit == 3 and number == 5:
-        return "5h", "5小时"
+        return "5h", translate(language, "period_5h")
     if unit == 6 and number == 1:
-        return "week", "周"
+        return "week", translate(language, "period_week")
     if unit == 5 and number == 1:
-        return "month", "月"
+        return "month", translate(language, "period_month")
     return None
 
 
-def quota_kind(limit: dict[str, Any]) -> tuple[str, str]:
+def quota_kind(limit: dict[str, Any], language: str) -> tuple[str, str]:
     text = json.dumps(limit, ensure_ascii=False).lower()
     tool_markers = ("tool", "工具", "function", "mcp")
     text_markers = ("token", "text", "文本")
 
     if any(marker in text for marker in tool_markers):
-        return "tool", "工具调用"
+        return "tool", translate(language, "tool_calls")
     if any(marker in text for marker in text_markers):
-        return "text", "文本生成"
+        return "text", translate(language, "text_generation")
     if "currentValue" in limit or "usage" in limit:
-        return "tool", "工具调用"
-    return "text", "文本生成"
+        return "tool", translate(language, "tool_calls")
+    return "text", translate(language, "text_generation")
 
 
 def usage_for(limit: dict[str, Any], kind: str) -> tuple[float, float, str]:
@@ -262,7 +338,7 @@ def color_for_percentage(pct: float) -> str:
     return "blue"
 
 
-def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, Any]], str | None]:
     data = payload.get("data", {})
     limits = data.get("limits", [])
     if not isinstance(limits, list):
@@ -278,12 +354,12 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
         if not isinstance(limit, dict):
             continue
 
-        period = period_for(limit)
+        period = period_for(limit, language)
         if period is None:
             continue
 
         period_id, period_label = period
-        kind_id, kind_label = quota_kind(limit)
+        kind_id, kind_label = quota_kind(limit, language)
         used, total, display_style = usage_for(limit, kind_id)
         if total <= 0:
             continue
@@ -301,9 +377,9 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
         )
 
     display_names = {
-        "glm-text-5h": "5 小时用量",
-        "glm-text-week": "周用量",
-        "glm-tool-month": "MCP 月用量",
+        "glm-text-5h": translate(language, "five_hour_usage"),
+        "glm-text-week": translate(language, "weekly_usage"),
+        "glm-tool-month": translate(language, "mcp_month_usage"),
     }
     order = {
         "glm-text-5h": 0,
@@ -316,7 +392,7 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
     return sorted(output, key=lambda value: order.get(value["id"], 99)), badge
 
 
-def build_chart(payload: dict[str, Any], period: str, buckets: list[datetime], bucket_unit: str) -> dict[str, Any]:
+def build_chart(payload: dict[str, Any], period: str, buckets: list[datetime], bucket_unit: str, language: str) -> dict[str, Any]:
     bucket_values: dict[str, dict[str, float]] = {
         bucket_id(bucket, bucket_unit): {} for bucket in buckets
     }
@@ -355,7 +431,7 @@ def build_chart(payload: dict[str, Any], period: str, buckets: list[datetime], b
 
     message = None
     if not any(bucket["segments"] for bucket in chart_buckets):
-        message = "暂无可用统计数据"
+        message = translate(language, "no_stats_data")
 
     return {
         "kind": "line",
@@ -633,7 +709,7 @@ def success(items: list[dict[str, Any]], badge: str | None = None, chart: dict[s
     return 0
 
 
-def failure(message: str) -> int:
+def failure(message: str, language: str) -> int:
     print(
         json.dumps(
             {
@@ -642,7 +718,7 @@ def failure(message: str) -> int:
                 "items": [
                     {
                         "id": "glm-error",
-                        "name": f"GLM 查询失败：{message}",
+                        "name": f"{translate(language, 'query_failed_prefix')}{message}",
                         "used": 0,
                         "limit": 1,
                         "displayStyle": "percent",
@@ -660,29 +736,30 @@ def failure(message: str) -> int:
 def main() -> int:
     api_key = get_api_key(sys.argv[1:])
     period = get_stat_period(sys.argv[1:])
+    language = get_app_language(sys.argv[1:])
     if not api_key:
-        return failure("请在插件设置中配置 Api Key")
+        return failure(translate(language, "missing_api_key"), language)
 
     try:
         payload = fetch_limits(api_key)
-        items, badge = build_items(payload)
+        items, badge = build_items(payload, language)
         if not items:
-            return failure("响应中没有可识别的配额项")
+            return failure(translate(language, "no_quota_items"), language)
         start_time, end_time, buckets, bucket_unit = stat_range(period)
         try:
             chart_payload = fetch_model_usage(api_key, start_time, end_time)
-            chart = build_chart(chart_payload, period, buckets, bucket_unit)
+            chart = build_chart(chart_payload, period, buckets, bucket_unit, language)
         except Exception:
-            chart = chart_message("统计数据查询失败", period, buckets, bucket_unit)
+            chart = chart_message(translate(language, "stats_query_failed"), period, buckets, bucket_unit)
         return success(items, badge=badge, chart=chart)
     except urllib.error.HTTPError as error:
-        return failure(f"HTTP {error.code}")
+        return failure(f"HTTP {error.code}", language)
     except urllib.error.URLError as error:
-        return failure(str(error.reason))
+        return failure(str(error.reason), language)
     except TimeoutError:
-        return failure("请求超时")
+        return failure(translate(language, "request_timeout"), language)
     except Exception as error:
-        return failure(str(error))
+        return failure(str(error), language)
 
 
 if __name__ == "__main__":

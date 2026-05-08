@@ -3,12 +3,18 @@
 # {
 #   "schemaVersion": 1,
 #   "name": "MiniMax",
+#   "name@zh-Hans": "MiniMax",
+#   "name@en": "MiniMax",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/minimax-color.png",
 #   "description": "查询 MiniMax Coding Plan 用量",
+#   "description@zh-Hans": "查询 MiniMax Coding Plan 用量",
+#   "description@en": "Query MiniMax Coding Plan usage",
 #   "parameters": [
 #     {
 #       "name": "API_KEY",
 #       "label": "Api Key",
+#       "label@zh-Hans": "Api Key",
+#       "label@en": "API Key",
 #       "type": "secret",
 #       "required": true,
 #       "placeholder": "MiniMax API Key"
@@ -60,6 +66,91 @@ def get_api_key(argv: list[str]) -> str | None:
     return parse_usageboard_params(argv).get("API_KEY")
 
 
+def get_app_language(argv: list[str]) -> str:
+    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
+
+
+TRANSLATIONS = {
+    "model_text_generation": {
+        "zh-Hans": "文本",
+        "en": "Text",
+    },
+    "model_vision": {
+        "zh-Hans": "视觉",
+        "en": "Vision",
+    },
+    "model_search": {
+        "zh-Hans": "搜索",
+        "en": "Search",
+    },
+    "model_image": {
+        "zh-Hans": "图像",
+        "en": "Image",
+    },
+    "model_speech": {
+        "zh-Hans": "语音",
+        "en": "Speech",
+    },
+    "model_fast_video": {
+        "zh-Hans": "快速视频",
+        "en": "Fast video",
+    },
+    "model_video": {
+        "zh-Hans": "视频",
+        "en": "Video",
+    },
+    "model_cover_song": {
+        "zh-Hans": "翻唱",
+        "en": "Cover song",
+    },
+    "model_lyrics": {
+        "zh-Hans": "歌词",
+        "en": "Lyrics",
+    },
+    "model_music": {
+        "zh-Hans": "音乐",
+        "en": "Music",
+    },
+    "period_5h": {
+        "zh-Hans": "5小时",
+        "en": "5 hours",
+    },
+    "period_day": {
+        "zh-Hans": "天",
+        "en": "day",
+    },
+    "period_week": {
+        "zh-Hans": "周",
+        "en": "week",
+    },
+    "period_generic": {
+        "zh-Hans": "周期",
+        "en": "period",
+    },
+    "query_failed_prefix": {
+        "zh-Hans": "MiniMax 查询失败：",
+        "en": "MiniMax query failed: ",
+    },
+    "missing_api_key": {
+        "zh-Hans": "请在插件设置中配置 Api Key",
+        "en": "Configure Api Key in plugin settings",
+    },
+    "no_quota_items": {
+        "zh-Hans": "响应中没有可识别的配额项",
+        "en": "No recognizable quota items in response",
+    },
+    "request_timeout": {
+        "zh-Hans": "请求超时",
+        "en": "Request timed out",
+    },
+}
+
+
+def translate(language: str, key: str) -> str:
+    values = TRANSLATIONS.get(key, {})
+    return values.get(language) or values.get("zh-Hans") or key
+
+
 def fetch_remains(api_key: str) -> dict[str, Any]:
     request = urllib.request.Request(
         ENDPOINT,
@@ -70,42 +161,6 @@ def fetch_remains(api_key: str) -> dict[str, Any]:
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
-
-
-def model_display_name(model_name: str) -> str:
-    if model_name == "MiniMax-M*":
-        return "文本生成"
-    if model_name == "coding-plan-vlm":
-        return "视觉"
-    if model_name == "coding-plan-search":
-        return "搜索"
-    if model_name.startswith("image-"):
-        return "图像"
-    if model_name == "speech-hd":
-        return "语音"
-    if model_name.startswith("MiniMax-Hailuo-") and "Fast" in model_name:
-        return "快速视频"
-    if model_name.startswith("MiniMax-Hailuo-"):
-        return "视频"
-    if model_name == "music-cover":
-        return "翻唱"
-    if model_name == "lyrics_generation":
-        return "歌词"
-    if model_name.startswith("music-"):
-        return "音乐"
-    return model_name
-
-
-def interval_label(model: dict[str, Any]) -> str:
-    time_diff_ms = numeric(model.get("end_time")) - numeric(model.get("start_time"))
-    hours_diff = time_diff_ms / 1000 / 3600
-    if hours_diff <= 5.1:
-        return "5小时"
-    if hours_diff <= 24.1:
-        return "天"
-    if hours_diff <= 168.1:
-        return "周"
-    return "周期"
 
 
 def numeric(value: Any) -> float:
@@ -160,35 +215,33 @@ def item(item_id: str, name: str, used: float, total: float, reset_at: str | Non
     }
 
 
-SORT_ORDER = [
-    "文本生成",
-    "视觉",
-    "搜索",
-    "图像",
-    "语音",
-    "视频",
-    "快速视频",
-    "音乐",
-    "翻唱",
-    "歌词",
-]
+MODEL_SORT_ORDER = {
+    "model_text_generation": 0,
+    "model_vision": 1,
+    "model_search": 2,
+    "model_image": 3,
+    "model_speech": 4,
+    "model_video": 5,
+    "model_fast_video": 6,
+    "model_music": 7,
+    "model_cover_song": 8,
+    "model_lyrics": 9,
+}
 
 
-PERIOD_ORDER = {"5小时": 0, "天": 1, "周": 2, "周期": 3}
-
-
-def sort_key(display_name: str) -> int:
-    for index, prefix in enumerate(SORT_ORDER):
-        if display_name.startswith(prefix):
-            return index
-    return len(SORT_ORDER)
+PERIOD_ORDER = {
+    "period_5h": 0,
+    "period_day": 1,
+    "period_week": 2,
+    "period_generic": 3,
+}
 
 
 def item_sort_key(entry: dict[str, Any]) -> tuple[int, int]:
-    name = entry["name"]
-    prefix = name.split(" (")[0]
-    period_text = name.split("(")[-1].rstrip(")") if "(" in name else ""
-    return (sort_key(prefix), PERIOD_ORDER.get(period_text, 99))
+    return (
+        MODEL_SORT_ORDER.get(entry.get("_sort_model_key"), len(MODEL_SORT_ORDER)),
+        PERIOD_ORDER.get(entry.get("_sort_period_key"), 99),
+    )
 
 
 def is_weekly_redundant(model: dict[str, Any], interval_total: float, weekly_total: float) -> bool:
@@ -210,7 +263,43 @@ IMAGE_PLAN_BADGES = {
 }
 
 
-def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+def model_display_key(model_name: str) -> str | None:
+    if model_name == "MiniMax-M*":
+        return "model_text_generation"
+    if model_name == "coding-plan-vlm":
+        return "model_vision"
+    if model_name == "coding-plan-search":
+        return "model_search"
+    if model_name.startswith("image-"):
+        return "model_image"
+    if model_name == "speech-hd":
+        return "model_speech"
+    if model_name.startswith("MiniMax-Hailuo-") and "Fast" in model_name:
+        return "model_fast_video"
+    if model_name.startswith("MiniMax-Hailuo-"):
+        return "model_video"
+    if model_name == "music-cover":
+        return "model_cover_song"
+    if model_name == "lyrics_generation":
+        return "model_lyrics"
+    if model_name.startswith("music-"):
+        return "model_music"
+    return None
+
+
+def interval_label_key(model: dict[str, Any]) -> str:
+    time_diff_ms = numeric(model.get("end_time")) - numeric(model.get("start_time"))
+    hours_diff = time_diff_ms / 1000 / 3600
+    if hours_diff <= 5.1:
+        return "period_5h"
+    if hours_diff <= 24.1:
+        return "period_day"
+    if hours_diff <= 168.1:
+        return "period_week"
+    return "period_generic"
+
+
+def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, Any]], str | None]:
     models = payload.get("model_remains", [])
     if not isinstance(models, list):
         return [], None
@@ -222,7 +311,8 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
             continue
 
         raw_name = str(model.get("model_name", "unknown"))
-        name = model_display_name(raw_name)
+        model_key = model_display_key(raw_name)
+        name = translate(language, model_key) if model_key else raw_name
         slug = raw_name.replace(" ", "-").replace("/", "-").lower()
 
         interval_total = numeric(model.get("current_interval_total_count"))
@@ -234,32 +324,38 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
             badge = IMAGE_PLAN_BADGES.get(int(interval_total))
 
         if interval_total > 0:
-            period = interval_label(model)
-            output.append(
-                item(
-                    f"minimax-{slug}-interval",
-                    f"{name} ({period})",
-                    interval_used,
-                    interval_total,
-                    reset_at_from_remaining_ms(model.get("remains_time")),
-                )
+            period_key = interval_label_key(model)
+            entry = item(
+                f"minimax-{slug}-interval",
+                f"{name} ({translate(language, period_key)})",
+                interval_used,
+                interval_total,
+                reset_at_from_remaining_ms(model.get("remains_time")),
             )
+            entry["_sort_model_key"] = model_key
+            entry["_sort_period_key"] = period_key
+            output.append(entry)
 
         if weekly_total > 0 and not is_weekly_redundant(model, interval_total, weekly_total):
-            output.append(
-                item(
-                    f"minimax-{slug}-week",
-                    f"{name} (周)",
-                    weekly_used,
-                    weekly_total,
-                    reset_at_from_remaining_ms(model.get("weekly_remains_time")),
-                )
+            period_key = "period_week"
+            entry = item(
+                f"minimax-{slug}-week",
+                f"{name} ({translate(language, period_key)})",
+                weekly_used,
+                weekly_total,
+                reset_at_from_remaining_ms(model.get("weekly_remains_time")),
             )
+            entry["_sort_model_key"] = model_key
+            entry["_sort_period_key"] = period_key
+            output.append(entry)
 
     if badge is None:
         badge = "Starter"
 
     output.sort(key=item_sort_key)
+    for entry in output:
+        entry.pop("_sort_model_key", None)
+        entry.pop("_sort_period_key", None)
     return output, badge
 
 
@@ -271,7 +367,7 @@ def success(items: list[dict[str, Any]], badge: str | None = None) -> int:
     return 0
 
 
-def failure(message: str) -> int:
+def failure(message: str, language: str) -> int:
     print(
         json.dumps(
             {
@@ -280,7 +376,7 @@ def failure(message: str) -> int:
                 "items": [
                     {
                         "id": "minimax-error",
-                        "name": f"MiniMax 查询失败：{message}",
+                        "name": f"{translate(language, 'query_failed_prefix')}{message}",
                         "used": 0,
                         "limit": 1,
                         "displayStyle": "percent",
@@ -297,22 +393,23 @@ def failure(message: str) -> int:
 
 def main() -> int:
     api_key = get_api_key(sys.argv[1:])
+    language = get_app_language(sys.argv[1:])
     if not api_key:
-        return failure("请在插件设置中配置 Api Key")
+        return failure(translate(language, "missing_api_key"), language)
 
     try:
-        items, badge = build_items(fetch_remains(api_key))
+        items, badge = build_items(fetch_remains(api_key), language)
         if not items:
-            return failure("响应中没有可识别的配额项")
+            return failure(translate(language, "no_quota_items"), language)
         return success(items, badge=badge)
     except urllib.error.HTTPError as error:
-        return failure(f"HTTP {error.code}")
+        return failure(f"HTTP {error.code}", language)
     except urllib.error.URLError as error:
-        return failure(str(error.reason))
+        return failure(str(error.reason), language)
     except TimeoutError:
-        return failure("请求超时")
+        return failure(translate(language, "request_timeout"), language)
     except Exception as error:
-        return failure(str(error))
+        return failure(str(error), language)
 
 
 if __name__ == "__main__":

@@ -3,12 +3,18 @@
 # {
 #   "schemaVersion": 1,
 #   "name": "Codex",
+#   "name@zh-Hans": "Codex",
+#   "name@en": "Codex",
 #   "icon": "https://raw.githubusercontent.com/lobehub/lobe-icons/refs/heads/master/packages/static-png/light/codex-color.png",
 #   "description": "查询 OpenAI Codex CLI 用量和统计",
+#   "description@zh-Hans": "查询 OpenAI Codex CLI 用量和统计",
+#   "description@en": "Query OpenAI Codex CLI usage and stats",
 #   "parameters": [
 #     {
 #       "name": "DATA_DIR",
 #       "label": "数据目录",
+#       "label@zh-Hans": "数据目录",
+#       "label@en": "Data Directory",
 #       "type": "string",
 #       "required": false,
 #       "defaultValue": "~/.codex",
@@ -17,12 +23,14 @@
 #     {
 #       "name": "STAT_PERIOD",
 #       "label": "统计周期",
+#       "label@zh-Hans": "统计周期",
+#       "label@en": "Stats Period",
 #       "type": "choice",
 #       "required": false,
 #       "defaultValue": "7d",
 #       "options": [
-#         {"label": "7 天", "value": "7d"},
-#         {"label": "30 天", "value": "30d"}
+#         {"label": "7 天", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+#         {"label": "30 天", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
 #       ]
 #     }
 #   ]
@@ -65,6 +73,63 @@ def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
         else:
             index += 1
     return values
+
+
+def app_language(params: dict[str, str]) -> str:
+    return "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
+
+
+TRANSLATIONS = {
+    "no_stats_data": {
+        "zh-Hans": "暂无可用统计数据",
+        "en": "No stats data available",
+    },
+    "five_hour_usage": {
+        "zh-Hans": "5 小时用量",
+        "en": "5-hour usage",
+    },
+    "weekly_usage": {
+        "zh-Hans": "周用量",
+        "en": "Weekly usage",
+    },
+    "query_failed_prefix": {
+        "zh-Hans": "Codex 查询失败：",
+        "en": "Codex query failed: ",
+    },
+    "auth_file_not_found": {
+        "zh-Hans": "未找到认证文件（{path}）",
+        "en": "Auth file not found ({path})",
+    },
+    "auth_token_missing": {
+        "zh-Hans": "认证文件中缺少 access_token 或 account_id",
+        "en": "auth.json is missing access_token or account_id",
+    },
+    "token_expired": {
+        "zh-Hans": "Token 已过期，请重新登录 Codex",
+        "en": "Token expired; sign in to Codex again",
+    },
+    "unauthorized": {
+        "zh-Hans": "账号无权访问",
+        "en": "Account is not authorized",
+    },
+    "request_timeout": {
+        "zh-Hans": "请求超时",
+        "en": "Request timed out",
+    },
+    "stats_parse_failed": {
+        "zh-Hans": "统计数据解析失败",
+        "en": "Failed to parse stats data",
+    },
+    "no_quota_data": {
+        "zh-Hans": "响应中没有可识别的配额数据",
+        "en": "No recognizable quota data in response",
+    },
+}
+
+
+def translate(language: str, key: str) -> str:
+    values = TRANSLATIONS.get(key, {})
+    return values.get(language) or values.get("zh-Hans") or key
 
 
 def load_auth(data_dir: str) -> dict[str, Any] | None:
@@ -204,6 +269,7 @@ def parse_sessions_for_chart(
     buckets: list[datetime],
     bucket_unit: str,
     period: str,
+    language: str,
 ) -> dict[str, Any]:
     bucket_keys = {bucket_id(b, bucket_unit): {} for b in buckets}
     model_totals: dict[str, float] = {}
@@ -276,7 +342,7 @@ def parse_sessions_for_chart(
 
     message = None
     if not any(b["segments"] for b in chart_buckets):
-        message = "暂无可用统计数据"
+        message = translate(language, "no_stats_data")
 
     return {"kind": "line", "period": period, "bucketUnit": bucket_unit, "buckets": chart_buckets, "message": message}
 
@@ -289,7 +355,7 @@ def parse_window(data: dict[str, Any], *keys: str) -> dict[str, Any] | None:
     return None
 
 
-def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, Any]], str | None]:
     rate_limits = parse_window(payload, "rate_limit", "rate_limits")
     if not rate_limits:
         return [], None
@@ -314,7 +380,7 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
             used = 100 - pct
             items.append({
                 "id": "codex-five-hour",
-                "name": "5 小时用量",
+                "name": translate(language, "five_hour_usage"),
                 "used": round(used, 1),
                 "limit": 100,
                 "displayStyle": "percent",
@@ -329,7 +395,7 @@ def build_items(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], str | No
             used = 100 - pct
             items.append({
                 "id": "codex-weekly",
-                "name": "周用量",
+                "name": translate(language, "weekly_usage"),
                 "used": round(used, 1),
                 "limit": 100,
                 "displayStyle": "percent",
@@ -351,7 +417,7 @@ def success(items: list[dict[str, Any]], badge: str | None = None, chart: dict[s
     return 0
 
 
-def failure(message: str) -> int:
+def failure(message: str, language: str) -> int:
     print(
         json.dumps(
             {
@@ -360,7 +426,7 @@ def failure(message: str) -> int:
                 "items": [
                     {
                         "id": "codex-error",
-                        "name": f"Codex 查询失败：{message}",
+                        "name": f"{translate(language, 'query_failed_prefix')}{message}",
                         "used": 0,
                         "limit": 1,
                         "displayStyle": "percent",
@@ -377,6 +443,7 @@ def failure(message: str) -> int:
 
 def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
+    language = app_language(params)
     data_dir = params.get("DATA_DIR", "") or "~/.codex"
     period = params.get("STAT_PERIOD", "7d").lower()
     if period not in ("7d", "30d"):
@@ -384,40 +451,42 @@ def main() -> int:
 
     auth = load_auth(data_dir)
     if not auth:
-        return failure(f"未找到认证文件（{os.path.join(os.path.expanduser(data_dir), 'auth.json')}）")
+        path = os.path.join(os.path.expanduser(data_dir), "auth.json")
+        message = translate(language, "auth_file_not_found").format(path=path)
+        return failure(message, language)
 
     tokens = auth.get("tokens") if isinstance(auth.get("tokens"), dict) else {}
     access_token = tokens.get("access_token")
     account_id = tokens.get("account_id")
     if not access_token or not account_id:
-        return failure("认证文件中缺少 access_token 或 account_id")
+        return failure(translate(language, "auth_token_missing"), language)
 
     items: list[dict[str, Any]] = []
     badge: str | None = None
     try:
-        items, badge = build_items(fetch_usage(access_token, account_id))
+        items, badge = build_items(fetch_usage(access_token, account_id), language)
     except urllib.error.HTTPError as error:
         if error.code == 401:
-            return failure("Token 已过期，请重新登录 Codex")
+            return failure(translate(language, "token_expired"), language)
         if error.code == 403:
-            return failure("账号无权访问")
-        return failure(f"HTTP {error.code}")
+            return failure(translate(language, "unauthorized"), language)
+        return failure(f"HTTP {error.code}", language)
     except urllib.error.URLError as error:
-        return failure(str(error.reason))
+        return failure(str(error.reason), language)
     except TimeoutError:
-        return failure("请求超时")
+        return failure(translate(language, "request_timeout"), language)
     except Exception as error:
-        return failure(str(error))
+        return failure(str(error), language)
 
     start, end, buckets, bucket_unit = stat_range(period)
     try:
         session_files = collect_session_files(data_dir, start, end)
-        chart = parse_sessions_for_chart(session_files, buckets, bucket_unit, period)
+        chart = parse_sessions_for_chart(session_files, buckets, bucket_unit, period, language)
     except Exception:
-        chart = chart_message("统计数据解析失败", period, buckets, bucket_unit)
+        chart = chart_message(translate(language, "stats_parse_failed"), period, buckets, bucket_unit)
 
     if not items:
-        return failure("响应中没有可识别的配额数据")
+        return failure(translate(language, "no_quota_data"), language)
     return success(items, badge=badge, chart=chart)
 
 
