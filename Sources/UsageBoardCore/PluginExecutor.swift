@@ -64,6 +64,10 @@ public struct PluginExecutor: Sendable {
                 chart: pluginOutput.chart
             )
         } catch {
+            if let errorOutput = try? JSONDecoder().decode(PluginOutputError.self, from: outputData),
+               !errorOutput.error.isEmpty {
+                return failed(configuration: configuration, displayName: displayName, message: errorOutput.error)
+            }
             return failed(configuration: configuration, displayName: displayName, message: "\(text(.jsonParseFailed, language: language))\(error.localizedDescription)")
         }
     }
@@ -99,6 +103,10 @@ public struct PluginExecutor: Sendable {
             updatedAt: Date(),
             iconURL: configuration.metadata?.icon
         )
+    }
+
+    private struct PluginOutputError: Decodable {
+        let error: String
     }
 
     private enum Message {

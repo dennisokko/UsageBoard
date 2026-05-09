@@ -339,6 +339,26 @@ final class UsageBoardTests: XCTestCase {
         }
         XCTAssertTrue(message.contains("JSON 解析失败"))
     }
+
+    func testPluginExecutorDetectsErrorJSON() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let script = dir.appendingPathComponent("fake-plugin.py")
+        try """
+        import json
+        print(json.dumps({"error": "API Key 无效，请检查配置"}))
+        """.write(to: script, atomically: true, encoding: .utf8)
+
+        let config = PluginConfiguration(name: "Test", executablePath: script.path)
+        let snapshot = PluginExecutor(timeoutSeconds: 5).run(configuration: config, displayName: "Test")
+
+        guard case .failed(let message) = snapshot.state else {
+            XCTFail("Expected .failed, got \(snapshot.state)"); return
+        }
+        XCTAssertEqual(message, "API Key 无效，请检查配置")
+        XCTAssertTrue(snapshot.items.isEmpty)
+    }
 }
 #else
 struct UsageBoardTestsPlaceholder {}
