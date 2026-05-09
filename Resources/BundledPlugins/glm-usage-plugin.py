@@ -124,32 +124,23 @@ TRANSLATIONS = {
         "zh-Hans": "暂无可用统计数据",
         "en": "No stats data available",
     },
-    "query_failed_prefix": {
-        "zh-Hans": "GLM 查询失败：",
-        "en": "GLM query failed: ",
-    },
-    "missing_api_key": {
-        "zh-Hans": "请在插件设置中配置 Api Key",
-        "en": "Configure Api Key in plugin settings",
-    },
-    "no_quota_items": {
-        "zh-Hans": "响应中没有可识别的配额项",
-        "en": "No recognizable quota items in response",
-    },
-    "stats_query_failed": {
-        "zh-Hans": "统计数据查询失败",
-        "en": "Failed to query stats data",
-    },
-    "request_timeout": {
-        "zh-Hans": "请求超时",
-        "en": "Request timed out",
-    },
+    "missing_api_key":    {"zh-Hans": "请在插件设置中配置 API Key",          "en": "Configure API Key in plugin settings"},
+    "no_quota_items":     {"zh-Hans": "未获取到配额数据",                     "en": "No quota data found."},
+    "stats_query_failed": {"zh-Hans": "统计数据查询失败",                      "en": "Failed to query stats data"},
+    "request_timeout":    {"zh-Hans": "请求超时，请检查网络",                  "en": "Request timed out. Check your network."},
+    "http_401":           {"zh-Hans": "API Key 无效，请检查配置",             "en": "Invalid API Key. Check your settings."},
+    "http_403":           {"zh-Hans": "账号无权限访问",                        "en": "Access denied. Check your plan."},
+    "http_429":           {"zh-Hans": "请求频率超限，请稍后重试",               "en": "Rate limited. Try again later."},
+    "http_5xx":           {"zh-Hans": "服务暂时不可用 (HTTP {code})",         "en": "Service unavailable (HTTP {code})"},
+    "http_other":         {"zh-Hans": "请求失败 (HTTP {code})",              "en": "Request failed (HTTP {code})"},
+    "network_error":      {"zh-Hans": "网络连接失败，请检查网络",               "en": "Network error. Check your connection."},
 }
 
 
-def translate(language: str, key: str) -> str:
+def translate(language: str, key: str, **kwargs) -> str:
     values = TRANSLATIONS.get(key, {})
-    return values.get(language) or values.get("zh-Hans") or key
+    text = values.get(language) or values.get("zh-Hans") or key
+    return text.format(**kwargs) if kwargs else text
 
 
 def fetch_limits(api_key: str) -> dict[str, Any]:
@@ -710,33 +701,17 @@ def success(items: list[dict[str, Any]], badge: str | None = None, chart: dict[s
 
 
 def failure(message: str, language: str) -> int:
-    print(
-        json.dumps(
-            {
-                "schemaVersion": SCHEMA_VERSION,
-                "updatedAt": utc_now_iso(),
-                "items": [
-                    {
-                        "id": "glm-error",
-                        "name": f"{translate(language, 'query_failed_prefix')}{message}",
-                        "used": 0,
-                        "limit": 1,
-                        "displayStyle": "percent",
-                        "resetAt": None,
-                        "status": "critical",
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        )
-    )
+    print(json.dumps({"error": message}, ensure_ascii=False))
     return 0
 
 
 def main() -> int:
-    api_key = get_api_key(sys.argv[1:])
-    period = get_stat_period(sys.argv[1:])
-    language = get_app_language(sys.argv[1:])
+    params = parse_usageboard_params(sys.argv[1:])
+    api_key = params.get("API_KEY")
+    period = params.get("STAT_PERIOD", "7d").lower()
+    if period not in ("7d", "30d"):
+        period = "7d"
+    language = "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
     if not api_key:
         return failure(translate(language, "missing_api_key"), language)
 
@@ -753,13 +728,21 @@ def main() -> int:
             chart = chart_message(translate(language, "stats_query_failed"), period, buckets, bucket_unit)
         return success(items, badge=badge, chart=chart)
     except urllib.error.HTTPError as error:
-        return failure(f"HTTP {error.code}", language)
-    except urllib.error.URLError as error:
-        return failure(str(error.reason), language)
+        if error.code == 401:
+            return failure(translate(language, "http_401"), language)
+        if error.code == 403:
+            return failure(translate(language, "http_403"), language)
+        if error.code == 429:
+            return failure(translate(language, "http_429"), language)
+        if error.code >= 500:
+            return failure(translate(language, "http_5xx", code=error.code), language)
+        return failure(translate(language, "http_other", code=error.code), language)
+    except urllib.error.URLError:
+        return failure(translate(language, "network_error"), language)
     except TimeoutError:
         return failure(translate(language, "request_timeout"), language)
-    except Exception as error:
-        return failure(str(error), language)
+    except Exception:
+        return failure(translate(language, "network_error"), language)
 
 
 if __name__ == "__main__":
