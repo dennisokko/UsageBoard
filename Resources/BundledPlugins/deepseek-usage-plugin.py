@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 
 ENDPOINT = "https://api.deepseek.com/user/balance"
 MIN_LIMIT = 100.0
+SCHEMA_VERSION = 1
 
 
 def utc_now_iso() -> str:
@@ -62,20 +63,22 @@ def app_language(params: dict[str, str]) -> str:
 
 
 TRANSLATIONS = {
-    "balance": {
-        "zh-Hans": "余额",
-        "en": "Balance",
-    },
-    "missing_api_key": {
-        "zh-Hans": "缺少 API_KEY 参数",
-        "en": "Missing API_KEY parameter",
-    },
+    "balance":          {"zh-Hans": "余额",                              "en": "Balance"},
+    "missing_api_key":  {"zh-Hans": "请在插件设置中配置 API Key",          "en": "Configure API Key in plugin settings"},
+    "http_401":         {"zh-Hans": "API Key 无效，请检查配置",            "en": "Invalid API Key. Check your settings."},
+    "http_403":         {"zh-Hans": "账号无权限访问",                      "en": "Access denied. Check your plan."},
+    "http_429":         {"zh-Hans": "请求频率超限，请稍后重试",              "en": "Rate limited. Try again later."},
+    "http_5xx":         {"zh-Hans": "服务暂时不可用 (HTTP {code})",        "en": "Service unavailable (HTTP {code})"},
+    "http_other":       {"zh-Hans": "请求失败 (HTTP {code})",             "en": "Request failed (HTTP {code})"},
+    "request_timeout":  {"zh-Hans": "请求超时，请检查网络",                 "en": "Request timed out. Check your network."},
+    "network_error":    {"zh-Hans": "网络连接失败，请检查网络",              "en": "Network error. Check your connection."},
 }
 
 
-def translate(language: str, key: str) -> str:
+def translate(language: str, key: str, **kwargs) -> str:
     values = TRANSLATIONS.get(key, {})
-    return values.get(language) or values.get("zh-Hans") or key
+    text = values.get(language) or values.get("zh-Hans") or key
+    return text.format(**kwargs) if kwargs else text
 
 
 def fetch_balance(api_key: str, language: str) -> list[dict]:
@@ -108,29 +111,42 @@ def fetch_balance(api_key: str, language: str) -> list[dict]:
     return items
 
 
-def main() -> None:
+def success(items: list[dict]) -> int:
+    print(json.dumps({"schemaVersion": SCHEMA_VERSION, "updatedAt": utc_now_iso(), "items": items}, ensure_ascii=False))
+    return 0
+
+
+def failure(message: str) -> int:
+    print(json.dumps({"error": message}, ensure_ascii=False))
+    return 0
+
+
+def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
     language = app_language(params)
     api_key = params.get("API_KEY", "")
     if not api_key:
-        print(json.dumps({"error": translate(language, "missing_api_key")}))
-        sys.exit(1)
+        return failure(translate(language, "missing_api_key"))
 
     try:
         items = fetch_balance(api_key, language)
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        print(json.dumps({"error": f"HTTP {e.code}: {body}"}))
-        sys.exit(1)
-    except Exception as e:
-        print(json.dumps({"error": str(e)}))
-        sys.exit(1)
+        if e.code == 401:
+            return failure(translate(language, "http_401"))
+        if e.code == 403:
+            return failure(translate(language, "http_403"))
+        if e.code == 429:
+            return failure(translate(language, "http_429"))
+        if e.code >= 500:
+            return failure(translate(language, "http_5xx", code=e.code))
+        return failure(translate(language, "http_other", code=e.code))
+    except TimeoutError:
+        return failure(translate(language, "request_timeout"))
+    except Exception:
+        return failure(translate(language, "network_error"))
 
-    print(json.dumps({
-        "updatedAt": utc_now_iso(),
-        "items": items,
-    }, ensure_ascii=False))
+    return success(items)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
