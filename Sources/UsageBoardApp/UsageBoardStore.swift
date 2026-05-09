@@ -22,6 +22,7 @@ final class UsageBoardStore: ObservableObject {
     private var refreshTasks: [UUID: Task<Void, Never>] = [:]
     private var isSystemActive: Bool = true
     private var systemActivityObservers: [NSObjectProtocol] = []
+    private var pendingConfigSave: Task<Void, Never>?
 
     init(
         configStore: ConfigStore = ConfigStore(),
@@ -82,14 +83,28 @@ final class UsageBoardStore: ObservableObject {
     }
 
     func saveConfiguration() {
-        do {
-            try configStore.save(configuration)
-            lastError = nil
-            rebuildSnapshots()
-            startSchedulers()
-            refreshPluginsAfterConfigurationChange()
-        } catch {
-            lastError = storeMessage(.configurationSaveFailed(error.localizedDescription))
+        lastError = nil
+        rebuildSnapshots()
+        startSchedulers()
+        refreshPluginsAfterConfigurationChange()
+        scheduleConfigurationWrite()
+    }
+
+    private func scheduleConfigurationWrite() {
+        pendingConfigSave?.cancel()
+        let snapshot = configuration
+        let store = configStore
+        pendingConfigSave = Task { [weak self] in
+            do {
+                try await Task.detached(priority: .utility) {
+                    try store.save(snapshot)
+                }.value
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.lastError = self?.storeMessage(.configurationSaveFailed(error.localizedDescription)) ?? error.localizedDescription
+            }
         }
     }
 
@@ -227,7 +242,10 @@ final class UsageBoardStore: ObservableObject {
                     badge: snapshot.badge,
                     chart: snapshot.chart
                 )
-                stateStore.save(stateID: plugin.stateID, state: cached)
+                let stateID = plugin.stateID
+                Task.detached(priority: .utility) {
+                    stateStore.save(stateID: stateID, state: cached)
+                }
             }
         }
     }
