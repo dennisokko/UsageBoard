@@ -493,20 +493,16 @@ private extension Encodable {
 }
 
 private extension Equatable {
-    static func localizedValue(base: String, translations: [String: String], language: AppLanguage) -> String {
-        let translated = translations[language.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let translated, !translated.isEmpty {
-            return translations[language.rawValue] ?? base
+    static func localizedOptionalValue(base: String?, translations: [String: String], language: AppLanguage) -> String? {
+        let raw = translations[language.rawValue]
+        if let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return raw
         }
         return base
     }
 
-    static func localizedOptionalValue(base: String?, translations: [String: String], language: AppLanguage) -> String? {
-        let translated = translations[language.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let translated, !translated.isEmpty {
-            return translations[language.rawValue]
-        }
-        return base
+    static func localizedValue(base: String, translations: [String: String], language: AppLanguage) -> String {
+        localizedOptionalValue(base: base, translations: translations, language: language) ?? base
     }
 }
 
