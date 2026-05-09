@@ -761,11 +761,36 @@ struct PluginParameterField: View {
                     Text(option.localizedLabel(language: language)).tag(option.value)
                 }
             }
-            .pickerStyle(.radioGroup)
+            .pickerStyle(.segmented)
             .labelsHidden()
         case .string:
             TextField(parameter.localizedPlaceholder(language: language) ?? "", text: valueBinding)
                 .textFieldStyle(.roundedBorder)
+        case .directory:
+            HStack(spacing: 6) {
+                TextField(parameter.localizedPlaceholder(language: language) ?? "", text: valueBinding)
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.title = parameter.localizedLabel(language: language)
+                    panel.canChooseFiles = false
+                    panel.canChooseDirectories = true
+                    panel.allowsMultipleSelection = false
+                    panel.canCreateDirectories = false
+                    let current = valueBinding.wrappedValue
+                    if !current.isEmpty {
+                        let expanded = NSString(string: current).expandingTildeInPath
+                        let url = URL(fileURLWithPath: expanded)
+                        panel.directoryURL = url
+                    }
+                    if panel.runModal() == .OK, let url = panel.url {
+                        valueBinding.wrappedValue = url.path
+                    }
+                } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+            }
         }
     }
 
