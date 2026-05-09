@@ -339,31 +339,7 @@ def maintain_cache(data_dir):
     cache = load_stats_cache(data_dir)
     now = utc_now()
 
-    if cache is None:
-        # No cache: full 30-day scan
-        oldest_local = cutoff
-        start_dt = datetime.combine(oldest_local, datetime.min.time(), tzinfo=now.astimezone().tzinfo) - timedelta(hours=14)
-        records = parse_records(all_jsonl_files(data_dir), start_dt, now)
-        by_day = group_by_local_date(records)
-        days = {d: by_day.get(d, {}) for d in
-                (_format_date(cutoff + timedelta(days=i)) for i in range(30))
-                if _parse_date(d) <= today}
-        save_stats_cache(data_dir, {
-            "version": CACHE_VERSION,
-            "last_date": _format_date(today),
-            "days": days,
-        })
-        return days
-
-    last_date = _parse_date(cache.get("last_date", "2000-01-01"))
-    gap_days = (today - last_date).days
-
-    if gap_days <= 0:
-        # Cache is current, just return cached days
-        return cache.get("days", {})
-
-    if gap_days > 30:
-        # Gap too large, full 30-day rescan
+    def full_scan_and_save():
         start_dt = datetime.combine(cutoff, datetime.min.time(), tzinfo=now.astimezone().tzinfo) - timedelta(hours=14)
         records = parse_records(all_jsonl_files(data_dir), start_dt, now)
         by_day = group_by_local_date(records)
@@ -376,6 +352,18 @@ def maintain_cache(data_dir):
             "days": days,
         })
         return days
+
+    if cache is None:
+        return full_scan_and_save()
+
+    last_date = _parse_date(cache.get("last_date", "2000-01-01"))
+    gap_days = (today - last_date).days
+
+    if gap_days <= 0:
+        return cache.get("days", {})
+
+    if gap_days > 30:
+        return full_scan_and_save()
 
     # Incremental: scan from last_date+1 to today, only files modified since then
     scan_start = last_date + timedelta(days=1)
