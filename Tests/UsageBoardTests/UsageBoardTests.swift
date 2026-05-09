@@ -340,6 +340,32 @@ final class UsageBoardTests: XCTestCase {
         XCTAssertTrue(message.contains("JSON 解析失败"))
     }
 
+    func testPluginExecutorHandlesLargeStdout() throws {
+        // Regression test for pipe-buffer deadlock: stdout > 16KB used to hang
+        // until 15s timeout because pipe was only drained after wait().
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let script = dir.appendingPathComponent("big-stdout.py")
+        try """
+        import json, sys
+        # ~100 KB of stderr noise (must not deadlock either)
+        sys.stderr.write("x" * 100_000)
+        sys.stderr.flush()
+        # ~150 KB of stdout JSON
+        items = [{"id": f"i-{i}", "name": "x" * 200, "used": i, "limit": 1000, "displayStyle": "ratio", "status": "normal"} for i in range(500)]
+        print(json.dumps({"schemaVersion": 1, "updatedAt": "2026-05-09T00:00:00Z", "items": items}))
+        """.write(to: script, atomically: true, encoding: .utf8)
+
+        let config = PluginConfiguration(name: "Big", executablePath: script.path)
+        let snapshot = PluginExecutor(timeoutSeconds: 3).run(configuration: config, displayName: "Big")
+
+        guard case .ready = snapshot.state else {
+            XCTFail("Expected .ready, got \(snapshot.state)"); return
+        }
+        XCTAssertEqual(snapshot.items.count, 500)
+    }
+
     func testPluginExecutorDetectsErrorJSON() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)

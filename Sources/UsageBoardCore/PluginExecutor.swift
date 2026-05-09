@@ -1,5 +1,22 @@
 @preconcurrency import Foundation
 
+private final class DataBuffer: @unchecked Sendable {
+    private var data = Data()
+    private let lock = NSLock()
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        lock.unlock()
+    }
+
+    func snapshot() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return data
+    }
+}
+
 public struct PluginExecutor: Sendable {
     public var timeoutSeconds: TimeInterval
 
@@ -31,20 +48,59 @@ public struct PluginExecutor: Sendable {
         process.standardOutput = stdout
         process.standardError = stderr
 
+        let outputBuffer = DataBuffer()
+        let errorBuffer = DataBuffer()
+        let outputDrained = DispatchSemaphore(value: 0)
+        let errorDrained = DispatchSemaphore(value: 0)
+
+        stdout.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                outputDrained.signal()
+            } else {
+                outputBuffer.append(chunk)
+            }
+        }
+        stderr.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                errorDrained.signal()
+            } else {
+                errorBuffer.append(chunk)
+            }
+        }
+
+        let exitSemaphore = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exitSemaphore.signal() }
+
         do {
             try process.run()
         } catch {
+            stdout.fileHandleForReading.readabilityHandler = nil
+            stderr.fileHandleForReading.readabilityHandler = nil
             return failed(configuration: configuration, displayName: displayName, message: error.localizedDescription)
         }
 
-        let finished = wait(process: process, timeoutSeconds: timeoutSeconds)
+        let finished = exitSemaphore.wait(timeout: .now() + timeoutSeconds) == .success
         if !finished {
             process.terminate()
+            _ = exitSemaphore.wait(timeout: .now() + 1.0)
+        }
+
+        // Wait briefly for readability handlers to drain remaining buffered data after EOF.
+        _ = outputDrained.wait(timeout: .now() + 1.0)
+        _ = errorDrained.wait(timeout: .now() + 1.0)
+        stdout.fileHandleForReading.readabilityHandler = nil
+        stderr.fileHandleForReading.readabilityHandler = nil
+
+        if !finished {
             return failed(configuration: configuration, displayName: displayName, message: text(.timeout, language: language))
         }
 
-        let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errorData = stderr.fileHandleForReading.readDataToEndOfFile()
+        let outputData = outputBuffer.snapshot()
+        let errorData = errorBuffer.snapshot()
         if process.terminationStatus != 0 {
             let stderrText = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return failed(configuration: configuration, displayName: displayName, message: stderrText?.isEmpty == false ? stderrText! : text(.exitCode(process.terminationStatus), language: language))
@@ -82,15 +138,6 @@ public struct PluginExecutor: Sendable {
             .filter { !$0.value.isEmpty }
             .sorted { $0.key < $1.key }
             .flatMap { ["--usageboard-param", "\($0.key)=\($0.value)"] }
-    }
-
-    private func wait(process: Process, timeoutSeconds: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while process.isRunning {
-            if Date() >= deadline { return false }
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        return true
     }
 
     private func failed(configuration: PluginConfiguration, displayName: String, message: String) -> PluginSnapshot {
