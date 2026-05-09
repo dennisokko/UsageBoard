@@ -9,15 +9,17 @@ UsageBoard is a native macOS menu bar app that aggregates and displays usage quo
 - Resides in the menu bar; click the icon to open a quick preview.
 - Supports grouped and tabbed display modes.
 - Supports manual refresh, scheduled refresh, per-card refresh, and a quit button.
+- Scheduled refresh pauses during system sleep, display sleep, screen lock, or user switching, then resumes afterward.
 - Plugin-based usage queries with per-plugin configurable refresh intervals and parameters.
 - Plugin icon support: loads remote images from metadata config and caches them.
 - Subscription level badge display (black background, white rounded label).
-- Plugin settings UI auto-generated from script metadata.
+- Plugin settings UI auto-generated from script metadata, including segmented controls and directory pickers.
 - New plugins are disabled by default; required parameters are checked before enabling.
 - Plugin data cached to disk by `stateID`; last successful data shown on launch.
 - Bundled plugins are installed to the user plugin directory on first launch.
 - Settings page supports launch at login, plugin drag-and-drop reordering, plugin help docs, update checking, and in-app updates.
 - Usage display supports percentage or ratio, reset time, progress bar colors, and optional token usage charts.
+- Plugins can return failures as `{"error": "message"}`; the error is shown directly in the card body.
 - Supports Chinese and English; both app UI and plugin metadata display in the selected language.
 
 ## Screenshots
@@ -120,6 +122,7 @@ Main configuration JSON structure:
             "defaultValue": "7d",
             "options": [
               {"label": "7 days", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+              {"label": "15 days", "label@zh-Hans": "15 天", "label@en": "15 days", "value": "15d"},
               {"label": "30 days", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
             ]
           }
@@ -152,7 +155,7 @@ Plugins are recommended to use Python scripts. UsageBoard executes `.py` plugins
 /usr/bin/env python3 /path/to/plugin.py --usageboard-param KEY=value --usageboard-param USAGEBOARD_LANGUAGE=en
 ```
 
-Plugins must output valid JSON to stdout. stderr can be used for debugging; non-zero exit codes, timeouts, or invalid JSON will show as plugin errors.
+Plugins must output valid JSON to stdout. stderr can be used for debugging; non-zero exit codes, timeouts, or invalid JSON will show as plugin errors. Plugins can also write `{"error": "message"}` to stdout to report a failure, and UsageBoard shows that error in the plugin card body.
 
 See the [Plugin Authoring Guide](Resources/PluginAuthoringGuide.html) for complete documentation.
 
@@ -189,6 +192,7 @@ Place a `UsageBoardPlugin` comment block at the top of the script. UsageBoard re
 #       "defaultValue": "7d",
 #       "options": [
 #         {"label": "7 days", "label@zh-Hans": "7 天", "label@en": "7 days", "value": "7d"},
+#         {"label": "15 days", "label@zh-Hans": "15 天", "label@en": "15 days", "value": "15d"},
 #         {"label": "30 days", "label@zh-Hans": "30 天", "label@en": "30 days", "value": "30d"}
 #       ]
 #     }
@@ -206,6 +210,9 @@ Supported parameter types:
 - `integer`
 - `boolean`
 - `choice`
+- `directory`
+
+`choice` parameters render as segmented controls in Settings; `directory` parameters render as a path field with a folder picker.
 
 Parameter reading example:
 
@@ -264,6 +271,14 @@ UsageBoard also passes the current app language: `--usageboard-param USAGEBOARD_
 }
 ```
 
+Failures can also return:
+
+```json
+{
+  "error": "Invalid API Key. Check your settings."
+}
+```
+
 Field descriptions:
 
 - `updatedAt`: Plugin data update time, ISO 8601 format.
@@ -276,12 +291,13 @@ Field descriptions:
 - `items[].color`: Optional progress bar color. Supports `blue`, `yellow`, `orange`, `red`, `green`; defaults to blue.
 - `badge`: Optional string displayed in a black rounded badge next to the plugin card title (white uppercase bold text).
 - `chart`: Optional token usage chart. Currently supports `kind: "line"`.
-- `chart.period`: Stats period identifier, e.g. `7d`, `30d`.
+- `chart.period`: Stats period identifier, e.g. `7d`, `15d`, `30d`.
 - `chart.bucketUnit`: Time bucket unit, supports `hour` or `day`.
 - `chart.buckets[].segments[]`: Per-bucket model segments with `model` and `tokens`.
 - `chart.message`: Optional message shown when stats data is empty or unavailable.
+- `error`: Optional top-level error message. When present and non-empty, the run is treated as failed and the text is shown in the card body.
 
-The bundled Zhipu and Codex plugins provide a `STAT_PERIOD` parameter supporting `7d` and `30d`. The Zhipu plugin uses the domestic API endpoint and is compatible with both Zhipu and ZAI Coding Plan keys. The Claude plugin fetches subscription usage via OAuth API and supports a `CLAUDE_ONLY` toggle to filter third-party models. The Codex plugin uses the `DATA_DIR` parameter to specify the data directory (default `~/.codex`), reads `auth.json` for authentication, and parses session files to generate token stats. Both Claude and Codex plugins use an incremental caching strategy stored in the data directory.
+The bundled Zhipu, Claude, and Codex plugins provide a `STAT_PERIOD` parameter supporting `7d`, `15d`, and `30d`. The Zhipu plugin uses the domestic API endpoint and is compatible with both Zhipu and ZAI Coding Plan keys. The Claude plugin fetches subscription usage via OAuth API, supports a `CLAUDE_ONLY` toggle to filter third-party models, and can use `DATA_DIR` to point at the `~/.claude` data directory. The Codex plugin uses the `DATA_DIR` parameter to specify the data directory (default `~/.codex`), reads `auth.json` for authentication, and parses session files to generate token stats. Both Claude and Codex plugins use an incremental caching strategy stored in the data directory and re-scan today's data on every run. The DeepSeek plugin provides a `LIMIT` parameter for the displayed balance limit and colors the progress bar by the balance-to-limit ratio.
 
 ## Installation
 
