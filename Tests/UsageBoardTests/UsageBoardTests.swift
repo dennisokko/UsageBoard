@@ -266,7 +266,7 @@ final class UsageBoardTests: XCTestCase {
 
         let period = try XCTUnwrap(metadata.parameters.first(where: { $0.name == "STAT_PERIOD" }))
         XCTAssertEqual(period.defaultValue, "7d")
-        XCTAssertEqual(period.options.map(\.value), ["7d", "30d"])
+        XCTAssertEqual(period.options.map(\.value), ["7d", "15d", "30d"])
     }
 
     func testDuplicatePluginNamesGetNumbered() {
