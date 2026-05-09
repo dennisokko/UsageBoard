@@ -350,6 +350,14 @@ struct PluginGroupView: View {
                     .foregroundStyle(.secondary)
             }
         case .failed:
+            Button {
+                onRefresh?()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 10))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .font(.system(size: 12))
