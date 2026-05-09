@@ -82,56 +82,27 @@ def app_language(params: dict[str, str]) -> str:
 
 
 TRANSLATIONS = {
-    "no_stats_data": {
-        "zh-Hans": "暂无可用统计数据",
-        "en": "No stats data available",
-    },
-    "five_hour_usage": {
-        "zh-Hans": "5 小时用量",
-        "en": "5-hour usage",
-    },
-    "weekly_usage": {
-        "zh-Hans": "周用量",
-        "en": "Weekly usage",
-    },
-    "query_failed_prefix": {
-        "zh-Hans": "Codex 查询失败：",
-        "en": "Codex query failed: ",
-    },
-    "auth_file_not_found": {
-        "zh-Hans": "未找到认证文件（{path}）",
-        "en": "Auth file not found ({path})",
-    },
-    "auth_token_missing": {
-        "zh-Hans": "认证文件中缺少 access_token 或 account_id",
-        "en": "auth.json is missing access_token or account_id",
-    },
-    "token_expired": {
-        "zh-Hans": "Token 已过期，请重新登录 Codex",
-        "en": "Token expired; sign in to Codex again",
-    },
-    "unauthorized": {
-        "zh-Hans": "账号无权访问",
-        "en": "Account is not authorized",
-    },
-    "request_timeout": {
-        "zh-Hans": "请求超时",
-        "en": "Request timed out",
-    },
-    "stats_parse_failed": {
-        "zh-Hans": "统计数据解析失败",
-        "en": "Failed to parse stats data",
-    },
-    "no_quota_data": {
-        "zh-Hans": "响应中没有可识别的配额数据",
-        "en": "No recognizable quota data in response",
-    },
+    "no_stats_data":        {"zh-Hans": "暂无可用统计数据",                              "en": "No stats data available"},
+    "five_hour_usage":      {"zh-Hans": "5 小时用量",                                   "en": "5-hour usage"},
+    "weekly_usage":         {"zh-Hans": "周用量",                                       "en": "Weekly usage"},
+    "auth_file_not_found":  {"zh-Hans": "未找到认证文件，请先登录 Codex（{path}）",      "en": "Auth file not found. Sign in to Codex first. ({path})"},
+    "auth_token_missing":   {"zh-Hans": "认证信息不完整，请重新登录 Codex",               "en": "Incomplete auth. Sign in to Codex again."},
+    "token_expired":        {"zh-Hans": "登录已过期，请重新运行 codex auth",              "en": "Session expired. Run codex auth again."},
+    "unauthorized":         {"zh-Hans": "账号无权限访问",                                "en": "Access denied. Check your plan."},
+    "http_429":             {"zh-Hans": "请求频率超限，请稍后重试",                       "en": "Rate limited. Try again later."},
+    "http_5xx":             {"zh-Hans": "服务暂时不可用 (HTTP {code})",                 "en": "Service unavailable (HTTP {code})"},
+    "http_other":           {"zh-Hans": "请求失败 (HTTP {code})",                      "en": "Request failed (HTTP {code})"},
+    "request_timeout":      {"zh-Hans": "请求超时，请检查网络",                           "en": "Request timed out. Check your network."},
+    "network_error":        {"zh-Hans": "网络连接失败，请检查网络",                        "en": "Network error. Check your connection."},
+    "stats_parse_failed":   {"zh-Hans": "统计数据解析失败",                               "en": "Failed to parse stats data"},
+    "no_quota_data":        {"zh-Hans": "未获取到配额数据，账号可能不支持此 API",          "en": "No quota data. Account may not support this API."},
 }
 
 
-def translate(language: str, key: str) -> str:
+def translate(language: str, key: str, **kwargs) -> str:
     values = TRANSLATIONS.get(key, {})
-    return values.get(language) or values.get("zh-Hans") or key
+    text = values.get(language) or values.get("zh-Hans") or key
+    return text.format(**kwargs) if kwargs else text
 
 
 def load_auth(data_dir: str) -> dict[str, Any] | None:
@@ -325,8 +296,6 @@ def maintain_chart_cache(data_dir: str, language: str) -> dict[str, dict[str, fl
         return days
 
     scan_start = last_date + timedelta(days=1)
-    start = datetime.combine(scan_start, time.min, tzinfo=tz) - timedelta(hours=14)
-    end = datetime.combine(today, time.max, tzinfo=tz).replace(microsecond=0)
     scan_dates = [scan_start + timedelta(days=i) for i in range(gap_days) if scan_start + timedelta(days=i) <= today]
     files = collect_session_files(data_dir, scan_start, today)
     result = parse_sessions_for_chart(files, scan_dates, "day", "30d", language)
@@ -563,26 +532,7 @@ def success(items: list[dict[str, Any]], badge: str | None = None, chart: dict[s
 
 
 def failure(message: str, language: str) -> int:
-    print(
-        json.dumps(
-            {
-                "schemaVersion": SCHEMA_VERSION,
-                "updatedAt": utc_now_iso(),
-                "items": [
-                    {
-                        "id": "codex-error",
-                        "name": f"{translate(language, 'query_failed_prefix')}{message}",
-                        "used": 0,
-                        "limit": 1,
-                        "displayStyle": "percent",
-                        "resetAt": None,
-                        "status": "critical",
-                    }
-                ],
-            },
-            ensure_ascii=False,
-        )
-    )
+    print(json.dumps({"error": message}, ensure_ascii=False))
     return 0
 
 
@@ -597,8 +547,7 @@ def main() -> int:
     auth = load_auth(data_dir)
     if not auth:
         path = os.path.join(os.path.expanduser(data_dir), "auth.json")
-        message = translate(language, "auth_file_not_found").format(path=path)
-        return failure(message, language)
+        return failure(translate(language, "auth_file_not_found", path=path), language)
 
     tokens = auth.get("tokens") if isinstance(auth.get("tokens"), dict) else {}
     access_token = tokens.get("access_token")
@@ -615,13 +564,17 @@ def main() -> int:
             return failure(translate(language, "token_expired"), language)
         if error.code == 403:
             return failure(translate(language, "unauthorized"), language)
-        return failure(f"HTTP {error.code}", language)
-    except urllib.error.URLError as error:
-        return failure(str(error.reason), language)
+        if error.code == 429:
+            return failure(translate(language, "http_429"), language)
+        if error.code >= 500:
+            return failure(translate(language, "http_5xx", code=error.code), language)
+        return failure(translate(language, "http_other", code=error.code), language)
+    except urllib.error.URLError:
+        return failure(translate(language, "network_error"), language)
     except TimeoutError:
         return failure(translate(language, "request_timeout"), language)
-    except Exception as error:
-        return failure(str(error), language)
+    except Exception:
+        return failure(translate(language, "network_error"), language)
 
     try:
         daily = maintain_chart_cache(data_dir, language)
