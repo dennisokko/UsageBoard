@@ -251,14 +251,10 @@ def maintain_chart_cache(data_dir: str, language: str) -> dict[str, dict[str, fl
     """Build and maintain a 30-day chart cache. Returns {date: {model: tokens}}."""
     today = datetime.now().date()
     cutoff = today - timedelta(days=29)
-    now = datetime.now(timezone.utc)
-    tz = datetime.now().astimezone().tzinfo
 
     cache = load_chart_cache(data_dir)
 
-    if cache is None:
-        start = datetime.combine(cutoff, time.min, tzinfo=tz) - timedelta(hours=14)
-        end = datetime.combine(today, time.max, tzinfo=tz).replace(microsecond=0)
+    def full_scan_and_save():
         buckets = [cutoff + timedelta(days=i) for i in range(30) if cutoff + timedelta(days=i) <= today]
         files = collect_session_files(data_dir, cutoff, today)
         result = parse_sessions_for_chart(files, buckets, "day", "30d", language)
@@ -272,6 +268,9 @@ def maintain_chart_cache(data_dir: str, language: str) -> dict[str, dict[str, fl
             "days": days,
         })
         return days
+
+    if cache is None:
+        return full_scan_and_save()
 
     last_date = _parse_date(cache.get("last_date", "2000-01-01"))
     gap_days = (today - last_date).days
@@ -280,21 +279,7 @@ def maintain_chart_cache(data_dir: str, language: str) -> dict[str, dict[str, fl
         return cache.get("days", {})
 
     if gap_days > 30:
-        start = datetime.combine(cutoff, time.min, tzinfo=tz) - timedelta(hours=14)
-        end = datetime.combine(today, time.max, tzinfo=tz).replace(microsecond=0)
-        buckets = [cutoff + timedelta(days=i) for i in range(30) if cutoff + timedelta(days=i) <= today]
-        files = collect_session_files(data_dir, cutoff, today)
-        result = parse_sessions_for_chart(files, buckets, "day", "30d", language)
-        days = {}
-        for b in result["buckets"]:
-            if b["segments"]:
-                days[b["id"]] = {s["model"]: s["tokens"] for s in b["segments"]}
-        save_chart_cache(data_dir, {
-            "version": CACHE_VERSION,
-            "last_date": _format_date(today),
-            "days": days,
-        })
-        return days
+        return full_scan_and_save()
 
     scan_start = last_date + timedelta(days=1)
     scan_dates = [scan_start + timedelta(days=i) for i in range(gap_days) if scan_start + timedelta(days=i) <= today]
