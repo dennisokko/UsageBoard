@@ -18,6 +18,16 @@
 #       "type": "secret",
 #       "required": true,
 #       "placeholder": "DeepSeek API Key"
+#     },
+#     {
+#       "name": "LIMIT",
+#       "label": "Amount Limit",
+#       "label@zh-Hans": "金额上限",
+#       "label@en": "Amount Limit",
+#       "type": "integer",
+#       "required": false,
+#       "defaultValue": "100",
+#       "placeholder": "100"
 #     }
 #   ]
 # }
@@ -34,8 +44,29 @@ from datetime import datetime, timezone
 
 
 ENDPOINT = "https://api.deepseek.com/user/balance"
-MIN_LIMIT = 100.0
+DEFAULT_LIMIT = 100.0
 SCHEMA_VERSION = 1
+
+
+def color_for_balance(balance: float, limit: float) -> str | None:
+    if limit <= 0:
+        return None
+    ratio = balance / limit
+    if ratio <= 0.10:
+        return "red"
+    if ratio <= 0.20:
+        return "orange"
+    if ratio <= 0.40:
+        return "yellow"
+    return None
+
+
+def parse_limit(raw: str) -> float:
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_LIMIT
+    return value if value > 0 else DEFAULT_LIMIT
 
 
 def utc_now_iso() -> str:
@@ -81,7 +112,7 @@ def translate(language: str, key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
-def fetch_balance(api_key: str, language: str) -> list[dict]:
+def fetch_balance(api_key: str, language: str, limit_amount: float) -> list[dict]:
     request = urllib.request.Request(
         ENDPOINT,
         headers={
@@ -96,17 +127,15 @@ def fetch_balance(api_key: str, language: str) -> list[dict]:
     for info in data.get("balance_infos", []):
         currency = info.get("currency", "CNY")
         total_balance = float(info.get("total_balance", "0"))
-        limit = max(total_balance, MIN_LIMIT)
         suffix = f" ({currency})" if currency != "CNY" else ""
-        color = "red" if total_balance <= 10 else "orange" if total_balance <= 20 else "yellow" if total_balance <= 40 else None
         items.append({
             "id": f"balance-{currency}",
             "name": f"{translate(language, 'balance')}{suffix}",
             "used": round(total_balance, 2),
-            "limit": round(limit, 2),
+            "limit": round(limit_amount, 2),
             "displayStyle": "ratio",
             "status": "normal",
-            "color": color,
+            "color": color_for_balance(total_balance, limit_amount),
         })
     return items
 
@@ -127,9 +156,10 @@ def main() -> int:
     api_key = params.get("API_KEY", "")
     if not api_key:
         return failure(translate(language, "missing_api_key"))
+    limit_amount = parse_limit(params.get("LIMIT", ""))
 
     try:
-        items = fetch_balance(api_key, language)
+        items = fetch_balance(api_key, language, limit_amount)
     except urllib.error.HTTPError as e:
         if e.code == 401:
             return failure(translate(language, "http_401"))

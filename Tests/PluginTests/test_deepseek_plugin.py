@@ -54,6 +54,38 @@ class TestErrorFormat(unittest.TestCase):
         self.assertEqual(exit_code, 0)
 
 
+class TestColorForBalance(unittest.TestCase):
+    """color_for_balance(balance, limit): ratio<=10% red, <=20% orange, <=40% yellow, else None."""
+
+    def test_zero_balance_is_red(self):
+        self.assertEqual(plugin.color_for_balance(0, 100), "red")
+
+    def test_at_10_percent_boundary_is_red(self):
+        self.assertEqual(plugin.color_for_balance(10, 100), "red")
+
+    def test_just_above_10_percent_is_orange(self):
+        self.assertEqual(plugin.color_for_balance(10.5, 100), "orange")
+
+    def test_at_20_percent_boundary_is_orange(self):
+        self.assertEqual(plugin.color_for_balance(20, 100), "orange")
+
+    def test_at_40_percent_boundary_is_yellow(self):
+        self.assertEqual(plugin.color_for_balance(40, 100), "yellow")
+
+    def test_above_40_percent_is_none(self):
+        self.assertIsNone(plugin.color_for_balance(41, 100))
+
+    def test_above_limit_is_none(self):
+        self.assertIsNone(plugin.color_for_balance(150, 100))
+
+    def test_custom_limit_scales_thresholds(self):
+        # With limit=200, 30 is 15% → orange (was yellow under 100-default before fix)
+        self.assertEqual(plugin.color_for_balance(30, 200), "orange")
+
+    def test_zero_limit_returns_none(self):
+        self.assertIsNone(plugin.color_for_balance(50, 0))
+
+
 class TestSchemaVersion(unittest.TestCase):
     """Success output must include schemaVersion."""
 
