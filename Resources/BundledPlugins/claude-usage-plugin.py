@@ -51,7 +51,7 @@
 #       "label": "Data Directory",
 #       "label@zh-Hans": "数据目录",
 #       "label@en": "Data Directory",
-#       "type": "string",
+#       "type": "directory",
 #       "required": false,
 #       "defaultValue": "~/.claude",
 #       "placeholder": "~/.claude"

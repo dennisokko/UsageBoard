@@ -15,7 +15,7 @@
 #       "label": "数据目录",
 #       "label@zh-Hans": "数据目录",
 #       "label@en": "Data Directory",
-#       "type": "string",
+#       "type": "directory",
 #       "required": false,
 #       "defaultValue": "~/.codex",
 #       "placeholder": "~/.codex"
