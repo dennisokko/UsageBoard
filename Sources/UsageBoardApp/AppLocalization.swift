@@ -36,7 +36,7 @@ struct AppLocalization {
     }
 
     func usageSuffix(for name: String) -> String {
-        language == .en ? "\(name) usage" : "\(name) 消耗"
+        name
     }
 
     func showOnlyUsageSuffix(for name: String) -> String {
@@ -107,12 +107,12 @@ struct AppLocalization {
         case (.collapseTokenStats, .zhHans): return "收起 token 统计"
         case (.expandTokenStats, .en): return "Expand token stats"
         case (.expandTokenStats, .zhHans): return "展开 token 统计"
-        case (.totalTokenUsage, .en): return "Total token usage"
-        case (.totalTokenUsage, .zhHans): return "Token 消耗总量"
+        case (.totalTokenUsage, .en): return "Total tokens"
+        case (.totalTokenUsage, .zhHans): return "Token 总量"
         case (.showAllLines, .en): return "Show all lines"
         case (.showAllLines, .zhHans): return "显示全部曲线"
-        case (.showOnlyTotalUsage, .en): return "Show only total usage"
-        case (.showOnlyTotalUsage, .zhHans): return "只显示消耗总量"
+        case (.showOnlyTotalUsage, .en): return "Show only total tokens"
+        case (.showOnlyTotalUsage, .zhHans): return "只显示 Token 总量"
         case (.noStatsData, .en): return "No stats data available"
         case (.noStatsData, .zhHans): return "暂无可用统计数据"
         case (.quitUsageBoard, .en): return "Quit UsageBoard"
