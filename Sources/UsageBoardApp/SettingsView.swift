@@ -14,7 +14,7 @@ enum SettingsTab: CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "gear"
-        case .plugins: return "puzzlepiece.extension"
+        case .plugins: return "powerplug"
         case .about: return "info.circle"
         }
     }
@@ -54,10 +54,7 @@ struct SettingsView: View {
                 case .plugins:
                     PluginSettingsView(store: store)
                 case .about:
-                    ScrollView {
-                        AboutView(store: store)
-                            .padding(20)
-                    }
+                    AboutView(store: store)
                 }
             }
         }
@@ -67,33 +64,38 @@ struct SettingsView: View {
     // MARK: Sidebar
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // App icon area
-            HStack {
-                Spacer()
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 28))
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                AppIconSquircle(size: 44)
+                Text("UsageBoard")
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                Spacer()
             }
-            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 14)
+            .padding(.bottom, 14)
 
-            Divider()
-                .padding(.horizontal, 12)
-
-            // Navigation items
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(SettingsTab.allCases) { tab in
                     sidebarItem(tab)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
+            .padding(.horizontal, 10)
 
             Spacer()
+
+            Text("v\(currentVersionString)")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
         }
-        .frame(width: 170)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .frame(width: 188)
+        .background(.regularMaterial)
+    }
+
+    private var currentVersionString: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     }
 
     private func sidebarItem(_ tab: SettingsTab) -> some View {
@@ -109,12 +111,12 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(selectedTab == tab ? Color.accentColor.opacity(0.15) : Color.clear)
+                    .fill(selectedTab == tab ? Color.accentColor : Color.clear)
             )
-            .foregroundStyle(selectedTab == tab ? Color.accentColor : Color.primary)
+            .foregroundStyle(selectedTab == tab ? Color.white : Color.primary)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -147,7 +149,7 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         SettingsSection {
-            SettingsRow(label: strings.text(.launchAtLogin)) {
+            SettingsRow(label: strings.text(.launchAtLogin), hint: strings.text(.launchAtLoginHint)) {
                 Toggle("", isOn: $store.configuration.launchAtLogin)
                     .toggleStyle(.switch)
                     .labelsHidden()
@@ -158,7 +160,7 @@ struct GeneralSettingsView: View {
                     .frame(width: 120, alignment: .leading)
             }
 
-            SettingsRow(label: strings.text(.displayMode)) {
+            SettingsRow(label: strings.text(.displayMode), hint: strings.text(.displayModeHint)) {
                 Picker("", selection: $store.configuration.overviewDisplayMode) {
                     ForEach(DisplayMode.allCases) { mode in
                         Text(strings.displayModeName(mode)).tag(mode)
@@ -215,6 +217,7 @@ struct PluginSettingsView: View {
     @State private var selectedPluginID: UUID?
     @State private var draggingPluginID: UUID?
     @State private var draft: PluginConfiguration?
+    @State private var searchText = ""
     private var strings: AppLocalization {
         AppLocalization(language: store.activeLanguage)
     }
@@ -229,13 +232,39 @@ struct PluginSettingsView: View {
             || draft.parameterValues != original.parameterValues
     }
 
+    private var filteredPlugins: [PluginConfiguration] {
+        guard !searchText.isEmpty else { return store.configuration.plugins }
+        let needle = searchText.lowercased()
+        return store.configuration.plugins.filter {
+            PluginDisplayNames.displayName(for: $0, language: store.activeLanguage)
+                .lowercased()
+                .contains(needle)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             // Plugin list sidebar
             VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                    TextField(store.activeLanguage == .en ? "Search plugins" : "搜索插件", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11.5))
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(Color.black.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(store.configuration.plugins) { plugin in
+                        ForEach(filteredPlugins) { plugin in
                             pluginListRow(plugin)
                                 .tag(plugin.id)
                                 .onTapGesture {
@@ -308,9 +337,9 @@ struct PluginSettingsView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
             }
-            .frame(width: 200)
+            .frame(width: 220)
             .frame(maxHeight: .infinity)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
 
             Divider()
 
@@ -363,6 +392,7 @@ struct PluginSettingsView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
+                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.7))
                 }
             } else {
                 VStack(spacing: 8) {
@@ -427,12 +457,14 @@ struct PluginSettingsView: View {
 
     private func pluginListRow(_ plugin: PluginConfiguration) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: "puzzlepiece.extension")
-                .font(.system(size: 12))
-                .foregroundStyle(selectedPluginID == plugin.id ? Color.accentColor : .secondary)
-                .frame(width: 16)
+            BrandTile(
+                iconURL: plugin.metadata?.icon,
+                fallbackName: PluginDisplayNames.displayName(for: plugin, language: store.activeLanguage),
+                size: 22
+            )
             Text(PluginDisplayNames.displayName(for: plugin, language: store.activeLanguage))
-                .font(.system(size: 13))
+                .font(.system(size: 12.5, weight: selectedPluginID == plugin.id ? .semibold : .regular))
+                .foregroundStyle(plugin.enabled ? Color.primary : Color.secondary)
                 .lineLimit(1)
             Spacer()
             Toggle("", isOn: pluginEnabledBinding(plugin))
@@ -441,7 +473,11 @@ struct PluginSettingsView: View {
                 .controlSize(.mini)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selectedPluginID == plugin.id ? Color.black.opacity(0.06) : Color.clear)
+        )
     }
 
     private func pluginEnabledBinding(_ plugin: PluginConfiguration) -> Binding<Bool> {
@@ -506,34 +542,47 @@ struct AboutView: View {
     }
 
     var body: some View {
-        SettingsSection {
-            SettingsRow(label: strings.text(.version)) {
-                HStack(spacing: 8) {
-                    Text(currentVersion)
+        HStack(alignment: .top, spacing: 22) {
+            AppIconSquircle(size: 88)
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("UsageBoard")
+                        .font(.system(size: 20, weight: .bold))
+                        .tracking(-0.3)
+                    Text(strings.text(.aboutDescription))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                }
+
+                HStack(spacing: 10) {
+                    Text(strings.text(.version))
+                        .font(.system(size: 12.5))
                         .foregroundStyle(.secondary)
+                    Text(currentVersion)
+                        .font(.system(size: 12.5))
+                        .monospacedDigit()
                     Button(store.isUpdating ? strings.text(.checkingUpdate) : strings.text(.checkForUpdates)) {
                         isUserChecking = true
                         store.checkForUpdates()
                     }
-                    .controlSize(.small)
+                    .controlSize(.regular)
                     .disabled(store.isUpdating)
                     if store.isUpdating {
                         ProgressView()
                             .controlSize(.small)
                     } else if let updateMessage = store.updateMessage {
                         Text(updateMessage)
-                            .font(.system(size: 12))
+                            .font(.system(size: 11.5))
                             .lineLimit(1)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                     }
                 }
             }
-
-            SettingsRow(label: strings.text(.aboutDescriptionLabel)) {
-                Text(strings.text(.aboutDescription))
-                    .foregroundStyle(.secondary)
-            }
+            Spacer()
         }
+        .padding(.horizontal, 32)
+        .padding(.top, 28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: store.availableUpdate) { newValue in
             guard isUserChecking, let newValue else { return }
             isUserChecking = false
@@ -586,20 +635,26 @@ struct SettingsSection<Content: View>: View {
 
 struct SettingsRow<Content: View>: View {
     var label: String
+    var hint: String? = nil
     @ViewBuilder var value: Content
 
     var body: some View {
-        HStack(alignment: .center) {
-            Text(label)
-                .font(.system(size: 13))
-                .frame(width: 100, alignment: .trailing)
-                .foregroundStyle(.primary)
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(label)
+                    .font(UB.Font.formLabel)
+                    .foregroundStyle(.primary)
+                if let hint {
+                    Text(hint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 180, alignment: .trailing)
             value
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(minHeight: 36)
+        .padding(.vertical, 8)
     }
 }
 
@@ -619,13 +674,14 @@ struct PluginSettingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
-            HStack {
+            HStack(spacing: 10) {
+                BrandTile(iconURL: plugin.metadata?.icon, fallbackName: displayName, size: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(UB.Font.detailTitle)
                     if let desc = plugin.metadata?.localizedDescription(language: language), !desc.isEmpty {
                         Text(desc)
-                            .font(.system(size: 12))
+                            .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -679,8 +735,10 @@ struct PluginSettingsCard: View {
             // Plugin parameters
             if let metadata = plugin.metadata, !metadata.parameters.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(strings.text(.pluginParameters))
-                        .font(.system(size: 13, weight: .semibold))
+                    Text(strings.text(.pluginParameters).uppercased())
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .tracking(0.4)
+                        .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(metadata.parameters) { parameter in
                             PluginParameterField(plugin: $plugin, parameter: parameter, language: language)

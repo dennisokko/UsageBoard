@@ -47,8 +47,12 @@ struct AppLocalization {
         switch (key, language) {
         case (.launchAtLogin, .en): return "Launch at Login"
         case (.launchAtLogin, .zhHans): return "开机启动"
+        case (.launchAtLoginHint, .en): return "Launch UsageBoard at login"
+        case (.launchAtLoginHint, .zhHans): return "登录时自动启动 UsageBoard"
         case (.displayMode, .en): return "Display Mode"
         case (.displayMode, .zhHans): return "显示模式"
+        case (.displayModeHint, .en): return "Group by service or merge to a list"
+        case (.displayModeHint, .zhHans): return "按服务分组或合并为列表"
         case (.language, .en): return "Language"
         case (.language, .zhHans): return "语言"
         case (.openPluginsFolder, .en): return "Open plugins folder"
@@ -132,7 +136,9 @@ struct AppLocalization {
 
     enum Key {
         case launchAtLogin
+        case launchAtLoginHint
         case displayMode
+        case displayModeHint
         case language
         case openPluginsFolder
         case pluginAuthoringGuide
