@@ -432,14 +432,15 @@ struct TokenUsageChartView: View {
         }
         return totals
             .filter { $0.key != "总计" }
-            .map { model, total in
-                TokenModelSummary(name: model, total: total, color: color(for: model))
-            }
-            .sorted { lhs, rhs in
-                if lhs.total == rhs.total {
-                    return lhs.name < rhs.name
+            .sorted(by: { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
                 }
-                return lhs.total > rhs.total
+                return lhs.value > rhs.value
+            })
+            .enumerated()
+            .map { index, element in
+                TokenModelSummary(name: element.key, total: element.value, color: modelColor(at: index))
             }
     }
 
@@ -515,9 +516,8 @@ struct TokenUsageChartView: View {
         return max(visibleWidth, CGFloat(max(chart.buckets.count - 1, 1)) * step + 110)
     }
 
-    private func color(for model: String) -> Color {
+    private func modelColor(at index: Int) -> Color {
         let palette: [Color] = [
-            .blue,
             .green,
             .orange,
             .purple,
@@ -527,16 +527,16 @@ struct TokenUsageChartView: View {
             .indigo,
             .mint,
             .brown,
+            .cyan,
+            .yellow,
         ]
-        let index = stableColorIndex(for: model, count: palette.count)
-        return palette[index]
-    }
-
-    private func stableColorIndex(for value: String, count: Int) -> Int {
-        let seed = value.unicodeScalars.reduce(0) { partial, scalar in
-            (partial &* 31 &+ Int(scalar.value)) % count
+        if index < palette.count {
+            return palette[index]
         }
-        return seed
+
+        let hue = Double((index - palette.count) % 24) / 24.0
+        let brightness = 0.62 + Double((index / 24) % 3) * 0.12
+        return Color(hue: hue, saturation: 0.72, brightness: min(brightness, 0.86))
     }
 }
 
