@@ -12,6 +12,7 @@ final class UsageBoardStore: ObservableObject {
     @Published var availableUpdate: UpdateInfo?
     @Published var isUpdating: Bool = false
     @Published var selectedTabID: UUID?
+    @Published private(set) var nextRefreshAt: [UUID: Date] = [:]
 
     let activeLanguage: AppLanguage
 
@@ -20,9 +21,18 @@ final class UsageBoardStore: ObservableObject {
     private let executor: PluginExecutor
     private let updateChecker: UpdateChecker
     private var refreshTasks: [UUID: Task<Void, Never>] = [:]
+    private var inflightRefreshTasks: [UUID: Task<Void, Never>] = [:]
+    private var schedulerKeys: [UUID: SchedulerKey] = [:]
     private var isSystemActive: Bool = true
     private var systemActivityObservers: [NSObjectProtocol] = []
-    private var pendingConfigSave: Task<Void, Never>?
+    private var systemInactiveTimeout: Task<Void, Never>?
+    private var configSaveTask: Task<Void, Never>?
+    private var configSaveGeneration: Int = 0
+
+    private struct SchedulerKey: Equatable {
+        let refreshIntervalSeconds: Int
+        let stateID: String
+    }
 
     init(
         configStore: ConfigStore = ConfigStore(),
@@ -65,6 +75,12 @@ final class UsageBoardStore: ObservableObject {
 
     deinit {
         refreshTasks.values.forEach { $0.cancel() }
+        inflightRefreshTasks.values.forEach { $0.cancel() }
+        systemInactiveTimeout?.cancel()
+        configSaveTask?.cancel()
+        // NotificationCenter observers are intentionally not removed here:
+        // they live in a MainActor-isolated non-Sendable array, and the
+        // store is a long-lived singleton — observers are reclaimed at process exit.
     }
 
     var displayNames: [UUID: String] {
@@ -91,10 +107,17 @@ final class UsageBoardStore: ObservableObject {
     }
 
     private func scheduleConfigurationWrite() {
-        pendingConfigSave?.cancel()
+        configSaveGeneration &+= 1
+        let myGeneration = configSaveGeneration
         let snapshot = configuration
         let store = configStore
-        pendingConfigSave = Task { [weak self] in
+        let previous = configSaveTask
+        configSaveTask = Task { [weak self] in
+            _ = await previous?.value
+            if Task.isCancelled { return }
+            guard let self else { return }
+            // Coalesce: skip if a newer save has been scheduled since
+            if self.configSaveGeneration != myGeneration { return }
             do {
                 try await Task.detached(priority: .utility) {
                     try store.save(snapshot)
@@ -102,8 +125,7 @@ final class UsageBoardStore: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                guard !Task.isCancelled else { return }
-                self?.lastError = self?.storeMessage(.configurationSaveFailed(error.localizedDescription)) ?? error.localizedDescription
+                self.lastError = self.storeMessage(.configurationSaveFailed(error.localizedDescription))
             }
         }
     }
@@ -145,6 +167,9 @@ final class UsageBoardStore: ObservableObject {
 
         guard enabled else {
             configuration.plugins[index].enabled = false
+            inflightRefreshTasks[id]?.cancel()
+            inflightRefreshTasks.removeValue(forKey: id)
+            nextRefreshAt.removeValue(forKey: id)
             saveConfiguration()
             return
         }
@@ -193,10 +218,16 @@ final class UsageBoardStore: ObservableObject {
         snapshots.removeValue(forKey: id)
         refreshTasks[id]?.cancel()
         refreshTasks.removeValue(forKey: id)
+        inflightRefreshTasks[id]?.cancel()
+        inflightRefreshTasks.removeValue(forKey: id)
+        schedulerKeys.removeValue(forKey: id)
+        nextRefreshAt.removeValue(forKey: id)
         saveConfiguration()
     }
 
     func refreshAll() {
+        // User-initiated refresh implies the app is active — clear any stale gate.
+        if !isSystemActive { setSystemActive(true) }
         for plugin in configuration.plugins where plugin.enabled {
             refresh(pluginID: plugin.id, force: true)
         }
@@ -230,11 +261,23 @@ final class UsageBoardStore: ObservableObject {
         let stateStore = stateStore
         let displayName = displayNames[plugin.id] ?? PluginDisplayNames.displayName(for: plugin, language: activeLanguage)
         let language = activeLanguage
-        Task {
+        let pluginID = plugin.id
+        nextRefreshAt[pluginID] = Date().addingTimeInterval(TimeInterval(max(plugin.refreshIntervalSeconds, 5)))
+        inflightRefreshTasks[pluginID]?.cancel()
+        inflightRefreshTasks[pluginID] = Task { [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
                 executor.run(configuration: plugin, displayName: displayName, language: language)
             }.value
-            snapshots[plugin.id] = snapshot
+            guard let self else { return }
+            if Task.isCancelled { return }
+            // Drop snapshot if the plugin was removed or disabled while in flight.
+            guard let current = self.configuration.plugins.first(where: { $0.id == pluginID }),
+                  current.enabled else {
+                self.inflightRefreshTasks.removeValue(forKey: pluginID)
+                return
+            }
+            self.snapshots[pluginID] = snapshot
+            self.inflightRefreshTasks.removeValue(forKey: pluginID)
             if snapshot.state == .ready, let updatedAt = snapshot.updatedAt {
                 let cached = PluginCachedState(
                     updatedAt: updatedAt,
@@ -242,7 +285,7 @@ final class UsageBoardStore: ObservableObject {
                     badge: snapshot.badge,
                     chart: snapshot.chart
                 )
-                let stateID = plugin.stateID
+                let stateID = current.stateID
                 Task.detached(priority: .utility) {
                     stateStore.save(stateID: stateID, state: cached)
                 }
@@ -349,35 +392,66 @@ final class UsageBoardStore: ObservableObject {
     }
 
     private func startSchedulers() {
-        refreshTasks.values.forEach { $0.cancel() }
-        refreshTasks = [:]
+        let enabledPlugins = configuration.plugins.filter { $0.enabled }
+        let currentIDs = Set(enabledPlugins.map(\.id))
 
-        for plugin in configuration.plugins where plugin.enabled {
+        // Cancel schedulers for plugins that no longer exist or were disabled.
+        for id in refreshTasks.keys where !currentIDs.contains(id) {
+            refreshTasks[id]?.cancel()
+            refreshTasks.removeValue(forKey: id)
+            schedulerKeys.removeValue(forKey: id)
+            nextRefreshAt.removeValue(forKey: id)
+        }
+
+        for plugin in enabledPlugins {
             let id = plugin.id
             let interval = max(plugin.refreshIntervalSeconds, 5)
-            let hasCached = stateStore.load(stateID: plugin.stateID) != nil
+            let newKey = SchedulerKey(refreshIntervalSeconds: interval, stateID: plugin.stateID)
+            let cached = stateStore.load(stateID: plugin.stateID)
 
+            // Keep an already-running scheduler if its key is unchanged.
+            if refreshTasks[id] != nil, schedulerKeys[id] == newKey {
+                if nextRefreshAt[id] == nil {
+                    nextRefreshAt[id] = scheduledRefreshDate(cached: cached, interval: interval)
+                }
+                continue
+            }
+
+            // Replace stale scheduler (interval or stateID changed) or start new one.
+            refreshTasks[id]?.cancel()
+            schedulerKeys[id] = newKey
+            let initialRefreshAt = scheduledRefreshDate(cached: cached, interval: interval)
+            nextRefreshAt[id] = initialRefreshAt
+
+            let hasCached = cached != nil
             if !hasCached {
                 snapshots[id] = makeSnapshot(for: plugin, state: .loading)
             }
 
             refreshTasks[id] = Task { [weak self] in
-                guard self?.isPluginReadyToRun(plugin) == true else { return }
-                if let cached = self?.stateStore.load(stateID: plugin.stateID) {
-                    let elapsed = Date().timeIntervalSince(cached.updatedAt)
-                    let remaining = Double(interval) - elapsed
-                    if remaining > 0 {
-                        try? await Task.sleep(for: .seconds(remaining))
-                    }
+                let initialDelay = max(0, initialRefreshAt.timeIntervalSince(Date()))
+                if initialDelay > 0 {
+                    try? await Task.sleep(for: .seconds(initialDelay))
                 }
                 while !Task.isCancelled {
-                    if self?.isSystemActive == true {
-                        self?.refresh(pluginID: id)
+                    guard let self else { return }
+                    guard let current = self.configuration.plugins.first(where: { $0.id == id }),
+                          current.enabled else { return }
+                    if self.isSystemActive, self.isPluginReadyToRun(current) {
+                        self.refresh(pluginID: id, force: true)
                     }
-                    try? await Task.sleep(for: .seconds(interval))
+                    let target = self.nextRefreshAt[id]
+                    let delay = target.map { max(0, $0.timeIntervalSince(Date())) } ?? TimeInterval(interval)
+                    try? await Task.sleep(for: .seconds(delay))
                 }
             }
         }
+    }
+
+    private func scheduledRefreshDate(cached: PluginCachedState?, interval: Int, now: Date = Date()) -> Date {
+        guard let cached else { return now }
+        let due = cached.updatedAt.addingTimeInterval(TimeInterval(interval))
+        return due > now ? due : now
     }
 
     private func refreshPluginsAfterConfigurationChange() {
@@ -393,51 +467,43 @@ final class UsageBoardStore: ObservableObject {
 
     private func observeSystemActivity() {
         let workspaceCenter = NSWorkspace.shared.notificationCenter
-        let distributedCenter = DistributedNotificationCenter.default()
 
-        let inactiveWorkspaceEvents: [NSNotification.Name] = [
-            NSWorkspace.willSleepNotification,
-            NSWorkspace.screensDidSleepNotification,
-            NSWorkspace.sessionDidResignActiveNotification,
-        ]
-        let activeWorkspaceEvents: [NSNotification.Name] = [
-            NSWorkspace.didWakeNotification,
-            NSWorkspace.screensDidWakeNotification,
-            NSWorkspace.sessionDidBecomeActiveNotification,
-        ]
-
-        for name in inactiveWorkspaceEvents {
-            let token = workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.setSystemActive(false) }
-            }
-            systemActivityObservers.append(token)
-        }
-        for name in activeWorkspaceEvents {
-            let token = workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.setSystemActive(true) }
-            }
-            systemActivityObservers.append(token)
-        }
-
-        let lockedToken = distributedCenter.addObserver(
-            forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
+        // Only gate on actual system sleep. Screen lock / session resign are
+        // intentionally ignored: usage tracking should continue while the user
+        // steps away, and the DistributedNotificationCenter lock/unlock events
+        // are unreliable — if only the lock event arrived, the previous code
+        // would freeze refresh indefinitely.
+        let sleepToken = workspaceCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.setSystemActive(false) }
         }
-        let unlockedToken = distributedCenter.addObserver(
-            forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main
+        let wakeToken = workspaceCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.setSystemActive(true) }
         }
-        systemActivityObservers.append(lockedToken)
-        systemActivityObservers.append(unlockedToken)
+        systemActivityObservers.append(sleepToken)
+        systemActivityObservers.append(wakeToken)
     }
 
     private func setSystemActive(_ active: Bool) {
         guard active != isSystemActive else { return }
         isSystemActive = active
+        systemInactiveTimeout?.cancel()
+        systemInactiveTimeout = nil
         if active {
             refreshPluginsIfDue()
+        } else {
+            // Safety net: if a wake notification is dropped or never arrives,
+            // recover after 4 hours so the app doesn't stay frozen.
+            systemInactiveTimeout = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(4 * 3600))
+                guard let self, !Task.isCancelled else { return }
+                if !self.isSystemActive {
+                    self.setSystemActive(true)
+                }
+            }
         }
     }
 
