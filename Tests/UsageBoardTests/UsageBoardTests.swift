@@ -269,6 +269,23 @@ final class UsageBoardTests: XCTestCase {
         XCTAssertEqual(period.options.map(\.value), ["7d", "15d", "30d"])
     }
 
+    func testCodexPluginMetadataReadsParameters() throws {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let root = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let pluginURL = root.appendingPathComponent("Resources/BundledPlugins/codex-usage-plugin.py")
+
+        let metadata = try XCTUnwrap(PluginMetadataParser.parse(fileURL: pluginURL))
+        XCTAssertEqual(metadata.name, "Codex")
+        XCTAssertEqual(metadata.parameters.map(\.name), ["AUTH_FILE", "DATA_DIR", "ENABLE_STATS", "STAT_PERIOD"])
+
+        let enableStats = try XCTUnwrap(metadata.parameters.first(where: { $0.name == "ENABLE_STATS" }))
+        XCTAssertEqual(enableStats.type, .boolean)
+        XCTAssertEqual(enableStats.defaultValue, "true")
+    }
+
     func testDuplicatePluginNamesGetNumbered() {
         let first = PluginConfiguration(name: "OpenAI", executablePath: "/bin/echo")
         let second = PluginConfiguration(name: "OpenAI", executablePath: "/bin/echo")
