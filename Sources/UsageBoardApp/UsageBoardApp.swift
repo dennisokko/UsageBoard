@@ -40,14 +40,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             return
         }
         let newPopover = NSPopover()
-        newPopover.contentSize = NSSize(width: 400, height: 400)
+        newPopover.contentSize = NSSize(width: 380, height: 400)
         newPopover.behavior = .applicationDefined
         newPopover.animates = false
         newPopover.delegate = self
         newPopover.appearance = NSApp.effectiveAppearance
         let hostingController = NSHostingController(
             rootView: OverviewView(store: store)
-                .frame(width: 400)
+                .frame(width: 380)
                 .background(Color(nsColor: .windowBackgroundColor))
         )
         hostingController.view.appearance = NSApp.effectiveAppearance
@@ -116,13 +116,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             return
         }
         let settingsView = SettingsView(store: store)
-            .frame(minWidth: 720, minHeight: 480)
+            .frame(minWidth: 800, minHeight: 480)
         let hostingController = NSHostingController(rootView: settingsView)
         let window = NSWindow(contentViewController: hostingController)
         window.title = store.activeLanguage == .en ? "UsageBoard Settings" : "UsageBoard 设置"
-        window.setContentSize(NSSize(width: 800, height: 560))
-        window.minSize = NSSize(width: 720, height: 480)
+        window.setContentSize(NSSize(width: 800, height: 520))
+        window.minSize = NSSize(width: 800, height: 480)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
         window.delegate = self
         window.center()
         let controller = NSWindowController(window: window)
