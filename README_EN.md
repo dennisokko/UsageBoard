@@ -26,11 +26,11 @@ UsageBoard is a native macOS menu bar app that aggregates and displays usage quo
 
 <table>
   <tr>
-    <td><img src="Screenshots/tabs-glm.jpg" alt="GLM Tab" width="360" /></td>
+    <td><img src="Screenshots/tabs-claude.jpg" alt="Claude Tab" width="360" /></td>
     <td><img src="Screenshots/tabs-minimax.jpg" alt="MiniMax Tab" width="360" /></td>
   </tr>
   <tr>
-    <td align="center">GLM Tab</td>
+    <td align="center">Claude Tab</td>
     <td align="center">MiniMax Tab</td>
   </tr>
   <tr>
