@@ -36,11 +36,24 @@ struct AppLocalization {
     }
 
     func usageSuffix(for name: String) -> String {
-        name
+        language == .en ? "\(name) usage" : "\(name) 用量"
     }
 
     func showOnlyUsageSuffix(for name: String) -> String {
         language == .en ? "Show only \(name)" : "只显示 \(name)"
+    }
+
+    func updateAvailableTitle(latestVersion: String) -> String {
+        language == .en ? "New version \(latestVersion) available" : "发现新版本 \(latestVersion)"
+    }
+
+    func updateAvailableMessage(currentVersion: String, latestVersion: String) -> String {
+        switch language {
+        case .en:
+            return "Current version \(currentVersion), new version \(latestVersion).\nDownload and update now?"
+        case .zhHans:
+            return "当前版本 \(currentVersion)，新版本 \(latestVersion)。\n是否立即下载并更新？"
+        }
     }
 
     func text(_ key: Key) -> String {
@@ -131,6 +144,18 @@ struct AppLocalization {
         case (.restartLater, .zhHans): return "稍后重启"
         case (.relaunchFailed, .en): return "Failed to restart UsageBoard"
         case (.relaunchFailed, .zhHans): return "重启 UsageBoard 失败"
+        case (.searchPlugins, .en): return "Search plugins"
+        case (.searchPlugins, .zhHans): return "搜索插件"
+        case (.errorBadge, .en): return "Error"
+        case (.errorBadge, .zhHans): return "错误"
+        case (.settingsWindowTitle, .en): return "UsageBoard Settings"
+        case (.settingsWindowTitle, .zhHans): return "UsageBoard 设置"
+        case (.updateNow, .en): return "Update"
+        case (.updateNow, .zhHans): return "更新"
+        case (.cancel, .en): return "Cancel"
+        case (.cancel, .zhHans): return "取消"
+        case (.scriptPathNotFound, .en): return "Script file does not exist"
+        case (.scriptPathNotFound, .zhHans): return "脚本文件不存在"
         }
     }
 
@@ -178,5 +203,11 @@ struct AppLocalization {
         case restartNow
         case restartLater
         case relaunchFailed
+        case searchPlugins
+        case errorBadge
+        case settingsWindowTitle
+        case updateNow
+        case cancel
+        case scriptPathNotFound
     }
 }

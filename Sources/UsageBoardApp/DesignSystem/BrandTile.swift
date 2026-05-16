@@ -3,14 +3,20 @@ import SwiftUI
 
 private final class BrandIconCache: @unchecked Sendable {
     static let shared = BrandIconCache()
-    private let cache = NSCache<NSString, NSImage>()
+    private let cache: NSCache<NSString, NSImage> = {
+        let c = NSCache<NSString, NSImage>()
+        c.countLimit = 64
+        c.totalCostLimit = 16 * 1024 * 1024
+        return c
+    }()
 
     func image(for url: URL) async -> NSImage? {
         let key = url.absoluteString as NSString
         if let cached = cache.object(forKey: key) { return cached }
         guard let (data, _) = try? await URLSession.shared.data(from: url),
               let image = NSImage(data: data) else { return nil }
-        cache.setObject(image, forKey: key)
+        let cost = max(data.count, 1)
+        cache.setObject(image, forKey: key, cost: cost)
         return image
     }
 }

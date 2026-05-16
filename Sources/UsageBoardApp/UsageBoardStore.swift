@@ -246,7 +246,8 @@ final class UsageBoardStore: ObservableObject {
             )
             return
         }
-        guard force || stateStore.needsRefresh(stateID: plugin.stateID, intervalSeconds: plugin.refreshIntervalSeconds) else { return }
+        let refreshInterval = max(plugin.refreshIntervalSeconds, 5)
+        guard force || stateStore.needsRefresh(stateID: plugin.stateID, intervalSeconds: refreshInterval) else { return }
 
         snapshots[plugin.id] = makeSnapshot(
             for: plugin,
@@ -262,7 +263,7 @@ final class UsageBoardStore: ObservableObject {
         let displayName = displayNames[plugin.id] ?? PluginDisplayNames.displayName(for: plugin, language: activeLanguage)
         let language = activeLanguage
         let pluginID = plugin.id
-        nextRefreshAt[pluginID] = Date().addingTimeInterval(TimeInterval(max(plugin.refreshIntervalSeconds, 5)))
+        nextRefreshAt[pluginID] = Date().addingTimeInterval(TimeInterval(refreshInterval))
         inflightRefreshTasks[pluginID]?.cancel()
         inflightRefreshTasks[pluginID] = Task { [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
@@ -287,7 +288,13 @@ final class UsageBoardStore: ObservableObject {
                 )
                 let stateID = current.stateID
                 Task.detached(priority: .utility) {
-                    stateStore.save(stateID: stateID, state: cached)
+                    do {
+                        try stateStore.save(stateID: stateID, state: cached)
+                    } catch {
+                        await MainActor.run {
+                            self.lastError = self.storeMessage(.cacheSaveFailed(error.localizedDescription))
+                        }
+                    }
                 }
             }
         }
@@ -329,9 +336,12 @@ final class UsageBoardStore: ObservableObject {
         Task {
             do {
                 let downloader = UpdateDownloader()
-                let newBundleURL = try await downloader.download(from: url)
+                let update = try await downloader.download(from: url)
                 updateMessage = storeMessage(.installingUpdate)
-                try AppRelauncher.relaunch(replacingWith: newBundleURL)
+                try AppRelauncher.relaunch(
+                    replacingWith: update.appURL,
+                    cleanupDirectoryURL: update.cleanupDirectoryURL
+                )
                 NSApp.terminate(nil)
             } catch {
                 isUpdating = false
@@ -559,21 +569,25 @@ final class UsageBoardStore: ObservableObject {
 
     // MARK: - Launch at Login
 
-    func toggleLaunchAtLogin(_ enabled: Bool) {
+    func requestLaunchAtLogin(_ enabled: Bool) {
+        guard enabled != configuration.launchAtLogin else { return }
         do {
             if enabled {
                 try SMAppService.mainApp.register()
             } else {
                 try SMAppService.mainApp.unregister()
             }
+            configuration.launchAtLogin = enabled
+            saveConfiguration()
         } catch {
             lastError = storeMessage(.launchAtLoginFailed(error.localizedDescription))
-            configuration.launchAtLogin = !enabled
+            objectWillChange.send()
         }
     }
 
     private enum StoreMessage {
         case configurationSaveFailed(String)
+        case cacheSaveFailed(String)
         case pluginsDirectoryCreateFailed(String)
         case missingRequiredParameters([String])
         case updateCheckURLMissing
@@ -591,6 +605,10 @@ final class UsageBoardStore: ObservableObject {
             return "Failed to save configuration: \(detail)"
         case (.configurationSaveFailed(let detail), .zhHans):
             return "配置保存失败：\(detail)"
+        case (.cacheSaveFailed(let detail), .en):
+            return "Failed to save plugin cache: \(detail)"
+        case (.cacheSaveFailed(let detail), .zhHans):
+            return "插件缓存保存失败：\(detail)"
         case (.pluginsDirectoryCreateFailed(let detail), .en):
             return "Failed to create plugins folder: \(detail)"
         case (.pluginsDirectoryCreateFailed(let detail), .zhHans):

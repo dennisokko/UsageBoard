@@ -1,15 +1,16 @@
 import SwiftUI
 
+private nonisolated(unsafe) let sharedTick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
 struct CountdownLabel: View {
     var target: Date?
     @State private var now = Date()
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Text(formatted)
             .font(UB.Font.countdown)
             .foregroundStyle(.tertiary)
-            .onReceive(tick) { now = $0 }
+            .onReceive(sharedTick) { now = $0 }
     }
 
     private var formatted: String {

@@ -124,7 +124,10 @@ struct DashboardView: View {
            enabledPlugins.contains(where: { $0.id == selectedTabID }) {
             return
         }
-        store.selectedTabID = enabledPlugins.first?.id
+        let firstID = enabledPlugins.first?.id
+        if store.selectedTabID != firstID {
+            store.selectedTabID = firstID
+        }
     }
 
     private func scrollToSelectedTab(with proxy: ScrollViewProxy) {
@@ -317,7 +320,7 @@ struct PluginGroupView: View {
                 PlanTag(text: badge)
             }
             if case .failed = snapshot.state {
-                Text(language == .en ? "Error" : "错误")
+                Text(strings.text(.errorBadge))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.red)
                     .padding(.horizontal, 6)
@@ -416,7 +419,8 @@ struct TokenUsageChartView: View {
     private var visibleSeries: [TokenChartSeries] {
         let filtered = series.filter { $0.values.contains(where: { $0 > 0 }) }
         guard let selectedSeries else { return filtered }
-        return filtered.filter { $0.name == selectedSeries }
+        let selected = filtered.filter { $0.name == selectedSeries }
+        return selected.isEmpty ? filtered : selected
     }
 
     private var modelSummaries: [TokenModelSummary] {

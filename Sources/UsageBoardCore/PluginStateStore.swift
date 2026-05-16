@@ -13,16 +13,17 @@ public struct PluginStateStore: Sendable {
         return try? UsageBoardJSON.decoder().decode(PluginCachedState.self, from: data)
     }
 
-    public func save(stateID: String, state: PluginCachedState) {
+    public func save(stateID: String, state: PluginCachedState) throws {
         let fm = FileManager.default
-        try? fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         let fileURL = directoryURL.appendingPathComponent("\(stateID).json")
-        guard let data = try? UsageBoardJSON.encoder().encode(state) else { return }
-        try? data.write(to: fileURL, options: [.atomic])
+        let data = try UsageBoardJSON.encoder().encode(state)
+        try data.write(to: fileURL, options: [.atomic])
     }
 
     public func needsRefresh(stateID: String, intervalSeconds: Int) -> Bool {
         guard let cached = load(stateID: stateID) else { return true }
-        return Date().timeIntervalSince(cached.updatedAt) > Double(intervalSeconds)
+        let interval = max(intervalSeconds, 5)
+        return Date().timeIntervalSince(cached.updatedAt) > Double(interval)
     }
 }

@@ -150,14 +150,13 @@ struct GeneralSettingsView: View {
     var body: some View {
         SettingsSection {
             SettingsRow(label: strings.text(.launchAtLogin), hint: strings.text(.launchAtLoginHint)) {
-                Toggle("", isOn: $store.configuration.launchAtLogin)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .onChange(of: store.configuration.launchAtLogin) { newValue in
-                        store.toggleLaunchAtLogin(newValue)
-                        store.saveConfiguration()
-                    }
-                    .frame(width: 120, alignment: .leading)
+                Toggle("", isOn: Binding(
+                    get: { store.configuration.launchAtLogin },
+                    set: { newValue in store.requestLaunchAtLogin(newValue) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .frame(width: 120, alignment: .leading)
             }
 
             SettingsRow(label: strings.text(.displayMode), hint: strings.text(.displayModeHint)) {
@@ -250,7 +249,7 @@ struct PluginSettingsView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
-                    TextField(store.activeLanguage == .en ? "Search plugins" : "搜索插件", text: $searchText)
+                    TextField(strings.text(.searchPlugins), text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11.5))
                 }
@@ -434,9 +433,13 @@ struct PluginSettingsView: View {
     private func saveDraft() {
         guard let draft else { return }
         guard let index = store.configuration.plugins.firstIndex(where: { $0.id == draft.id }) else { return }
+        if !draft.executablePath.isEmpty && !FileManager.default.fileExists(atPath: draft.executablePath) {
+            store.lastError = strings.text(.scriptPathNotFound)
+            return
+        }
         store.configuration.plugins[index].name = draft.name
         store.configuration.plugins[index].executablePath = draft.executablePath
-        store.configuration.plugins[index].refreshIntervalSeconds = draft.refreshIntervalSeconds
+        store.configuration.plugins[index].refreshIntervalSeconds = max(draft.refreshIntervalSeconds, 5)
         store.configuration.plugins[index].metadata = draft.metadata
         store.configuration.plugins[index].parameterValues = draft.parameterValues
         self.draft = store.configuration.plugins[index]
@@ -594,17 +597,12 @@ struct AboutView: View {
 
     private func showUpdateAlert(_ info: UpdateInfo) {
         let alert = NSAlert()
-        if store.activeLanguage == .en {
-            alert.messageText = "New version \(info.latestVersion) available"
-            alert.informativeText = info.notes?.isEmpty == false ? info.notes! : "Current version \(currentVersion), new version \(info.latestVersion).\nDownload and update now?"
-            alert.addButton(withTitle: "Update")
-            alert.addButton(withTitle: "Cancel")
-        } else {
-            alert.messageText = "发现新版本 \(info.latestVersion)"
-            alert.informativeText = info.notes?.isEmpty == false ? info.notes! : "当前版本 \(currentVersion)，新版本 \(info.latestVersion)。\n是否立即下载并更新？"
-            alert.addButton(withTitle: "更新")
-            alert.addButton(withTitle: "取消")
-        }
+        alert.messageText = strings.updateAvailableTitle(latestVersion: info.latestVersion)
+        alert.informativeText = info.notes?.isEmpty == false
+            ? info.notes!
+            : strings.updateAvailableMessage(currentVersion: currentVersion, latestVersion: info.latestVersion)
+        alert.addButton(withTitle: strings.text(.updateNow))
+        alert.addButton(withTitle: strings.text(.cancel))
         alert.alertStyle = .informational
 
         if alert.runModal() == .alertFirstButtonReturn {

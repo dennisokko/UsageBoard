@@ -19,15 +19,31 @@ public struct UpdateCheckResult: Equatable, Sendable {
     public var hasUpdate: Bool
 }
 
+public struct DownloadedUpdate: Equatable, Sendable {
+    public var appURL: URL
+    public var cleanupDirectoryURL: URL
+
+    public init(appURL: URL, cleanupDirectoryURL: URL) {
+        self.appURL = appURL
+        self.cleanupDirectoryURL = cleanupDirectoryURL
+    }
+}
+
 public struct UpdateDownloader: Sendable {
     public init() {}
 
-    public func download(from url: URL) async throws -> URL {
+    public func download(from url: URL) async throws -> DownloadedUpdate {
         let (tempURL, _) = try await URLSession.shared.download(from: url)
         defer { try? FileManager.default.removeItem(at: tempURL) }
 
         let extractDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("usageboard-update-\(UUID().uuidString)")
+        var shouldCleanExtractDir = true
+        defer {
+            if shouldCleanExtractDir {
+                try? FileManager.default.removeItem(at: extractDir)
+            }
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
@@ -43,7 +59,8 @@ public struct UpdateDownloader: Sendable {
         guard let appURL = appURLs.first else {
             throw UpdateError.extractionFailed
         }
-        return appURL
+        shouldCleanExtractDir = false
+        return DownloadedUpdate(appURL: appURL, cleanupDirectoryURL: extractDir)
     }
 }
 

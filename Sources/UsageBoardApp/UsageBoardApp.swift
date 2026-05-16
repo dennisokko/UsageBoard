@@ -109,17 +109,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         if let popover, popover.isShown {
             popover.performClose(nil)
         }
-        // Bring existing window to front
-        if let controller = settingsWindowController, let window = controller.window, !window.isReleasedWhenClosed {
+        // Bring existing window to front if it's still visible
+        if let controller = settingsWindowController, let window = controller.window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        // Clean up any residual controller whose window is already closing
+        settingsWindowController?.close()
+        settingsWindowController = nil
+
         let settingsView = SettingsView(store: store)
             .frame(minWidth: 800, minHeight: 480)
         let hostingController = NSHostingController(rootView: settingsView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = store.activeLanguage == .en ? "UsageBoard Settings" : "UsageBoard 设置"
+        window.title = AppLocalization(language: store.activeLanguage).text(.settingsWindowTitle)
         window.setContentSize(NSSize(width: 800, height: 520))
         window.minSize = NSSize(width: 800, height: 480)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
