@@ -66,5 +66,31 @@ class TestAuthCredentials(unittest.TestCase):
         self.assertEqual(plugin.extract_auth_credentials(auth), (None, None))
 
 
+class TestBuildItems(unittest.TestCase):
+    def test_build_items_reads_current_rate_limit_payload(self):
+        payload = {
+            "plan_type": "plus",
+            "rate_limit": {
+                "primary_window": {
+                    "used_percent": 25,
+                    "reset_at": 1_800_000_000,
+                },
+                "secondary_window": {
+                    "used_percent": 40,
+                    "reset_at": 1_800_010_000,
+                },
+            },
+        }
+
+        items, badge = plugin.build_items(payload, "zh-Hans")
+
+        self.assertEqual(badge, "plus")
+        self.assertEqual([item["id"] for item in items], ["codex-five-hour", "codex-weekly"])
+        self.assertEqual(items[0]["name"], "5 小时用量")
+        self.assertEqual(items[0]["used"], 25)
+        self.assertEqual(items[1]["name"], "周用量")
+        self.assertEqual(items[1]["used"], 40)
+
+
 if __name__ == "__main__":
     unittest.main()

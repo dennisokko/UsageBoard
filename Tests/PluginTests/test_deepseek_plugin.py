@@ -93,10 +93,9 @@ class TestSchemaVersion(unittest.TestCase):
     """Success output must include schemaVersion."""
 
     def test_success_output_has_schema_version(self):
-        fake_items = [{"id": "balance-CNY", "name": "余额", "used": 50.0, "limit": 50.0, "displayStyle": "ratio", "status": "normal", "color": None}]
         argv = ["deepseek-usage-plugin.py", "--usageboard-param", "API_KEY=fake"]
         with patch("sys.argv", argv):
-            with patch.object(plugin, "fetch_balance", return_value=fake_items):
+            with patch.object(plugin, "fetch_balance", return_value=FAKE_BALANCE_RESPONSE):
                 with patch("sys.stdout", new_callable=StringIO) as mock_out:
                     try:
                         plugin.main()
