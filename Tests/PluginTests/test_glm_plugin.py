@@ -2,8 +2,11 @@
 
 import importlib.util
 import sys
+import tempfile
 import unittest
+from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 PLUGIN_PATH = Path(__file__).parent.parent.parent / "Resources" / "BundledPlugins" / "glm-usage-plugin.py"
 
@@ -39,6 +42,94 @@ class TestQuotaKind(unittest.TestCase):
 
         self.assertEqual(kind, "text")
         self.assertEqual(label, "Text generation")
+
+
+class TestChartCache(unittest.TestCase):
+    def payload(self, dates, values, model="glm-4.5"):
+        return {
+            "data": {
+                "x_time": dates,
+                "modelDataList": [
+                    {
+                        "model": model,
+                        "tokensUsage": values,
+                    }
+                ],
+            }
+        }
+
+    def test_first_run_fetches_near_30_days(self):
+        api_key = "fake-key"
+        calls = []
+
+        def fake_fetch(_api_key, start_time, end_time):
+            calls.append((start_time, end_time))
+            return self.payload([end_time.strftime("%Y-%m-%d")], [42])
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            with patch.object(plugin, "fetch_model_usage", side_effect=fake_fetch):
+                daily = plugin.maintain_chart_cache(api_key, "zh-Hans", cache_dir=cache_dir)
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual((calls[0][1].date() - calls[0][0].date()).days, 29)
+        self.assertEqual(daily[calls[0][1].strftime("%Y-%m-%d")]["glm-4.5"], 42)
+
+    def test_current_cache_refreshes_today_only(self):
+        api_key = "fake-key"
+        today = plugin.datetime.now().astimezone().date()
+        yesterday = today - timedelta(days=1)
+        calls = []
+
+        def fake_fetch(_api_key, start_time, end_time):
+            calls.append((start_time, end_time))
+            return self.payload([plugin._format_date(today)], [9])
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            plugin.save_chart_cache(api_key, {
+                "version": plugin.CACHE_VERSION,
+                "last_date": plugin._format_date(today),
+                "days": {
+                    plugin._format_date(yesterday): {"old-model": 3},
+                    plugin._format_date(today): {"glm-4.5": 1},
+                },
+            }, cache_dir=cache_dir)
+
+            with patch.object(plugin, "fetch_model_usage", side_effect=fake_fetch):
+                daily = plugin.maintain_chart_cache(api_key, "zh-Hans", cache_dir=cache_dir)
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0].date(), today)
+        self.assertEqual(calls[0][1].date(), today)
+        self.assertEqual(daily[plugin._format_date(yesterday)], {"old-model": 3})
+        self.assertEqual(daily[plugin._format_date(today)], {"glm-4.5": 9})
+
+    def test_stale_cache_fetches_only_missing_dates(self):
+        api_key = "fake-key"
+        today = plugin.datetime.now().astimezone().date()
+        last_date = today - timedelta(days=3)
+        calls = []
+
+        def fake_fetch(_api_key, start_time, end_time):
+            calls.append((start_time, end_time))
+            return self.payload([plugin._format_date(today)], [5])
+
+        with tempfile.TemporaryDirectory() as cache_dir:
+            plugin.save_chart_cache(api_key, {
+                "version": plugin.CACHE_VERSION,
+                "last_date": plugin._format_date(last_date),
+                "days": {
+                    plugin._format_date(last_date): {"old-model": 7},
+                },
+            }, cache_dir=cache_dir)
+
+            with patch.object(plugin, "fetch_model_usage", side_effect=fake_fetch):
+                daily = plugin.maintain_chart_cache(api_key, "zh-Hans", cache_dir=cache_dir)
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0].date(), last_date + timedelta(days=1))
+        self.assertEqual(calls[0][1].date(), today)
+        self.assertEqual(daily[plugin._format_date(last_date)], {"old-model": 7})
+        self.assertEqual(daily[plugin._format_date(today)], {"glm-4.5": 5})
 
 
 if __name__ == "__main__":

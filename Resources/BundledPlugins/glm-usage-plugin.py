@@ -39,9 +39,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import hashlib
 import sys
 import urllib.error
 import urllib.parse
@@ -409,6 +409,157 @@ def build_chart(payload: dict[str, Any], period: str, buckets: list[datetime], b
     }
 
 
+def cache_key(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+
+
+def cache_path(api_key: str, cache_dir: str | None = None) -> str:
+    root = os.path.expanduser(cache_dir or os.environ.get("USAGEBOARD_CACHE_DIR") or DEFAULT_CACHE_DIR)
+    return os.path.join(root, f"{CACHE_FILENAME_PREFIX}-{cache_key(api_key)}.json")
+
+
+def load_chart_cache(api_key: str, cache_dir: str | None = None) -> dict[str, Any] | None:
+    path = cache_path(api_key, cache_dir)
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("version") != CACHE_VERSION:
+            return None
+        if not isinstance(data.get("days"), dict):
+            return None
+        return data
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_chart_cache(api_key: str, cache_data: dict[str, Any], cache_dir: str | None = None) -> None:
+    path = cache_path(api_key, cache_dir)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f)
+    except OSError:
+        pass
+
+
+def chart_payload_to_daily(
+    payload: dict[str, Any],
+    start_date,
+    end_date,
+    language: str,
+) -> dict[str, dict[str, float]]:
+    _, _, buckets = day_window(start_date, end_date)
+    chart = build_chart(payload, "30d", buckets, "day", language)
+    daily: dict[str, dict[str, float]] = {}
+    for bucket in chart["buckets"]:
+        values: dict[str, float] = {}
+        for segment in bucket.get("segments", []):
+            model = segment.get("model")
+            tokens = numeric_value(segment.get("tokens"))
+            if isinstance(model, str) and model and tokens is not None and tokens > 0:
+                values[model] = values.get(model, 0) + tokens
+        daily[bucket["id"]] = values
+    return daily
+
+
+def maintain_chart_cache(
+    api_key: str,
+    language: str,
+    cache_dir: str | None = None,
+) -> dict[str, dict[str, float]]:
+    """Build and maintain a 30-day API chart cache. Returns {date: {model: tokens}}."""
+    today = datetime.now().astimezone().date()
+    cutoff = today - timedelta(days=29)
+
+    cache = load_chart_cache(api_key, cache_dir)
+
+    def fetch_range(start_date, end_date) -> dict[str, dict[str, float]]:
+        start_time, end_time, _ = day_window(start_date, end_date)
+        payload = fetch_model_usage(api_key, start_time, end_time)
+        return chart_payload_to_daily(payload, start_date, end_date, language)
+
+    def full_fetch_and_save() -> dict[str, dict[str, float]]:
+        days = fetch_range(cutoff, today)
+        save_chart_cache(api_key, {
+            "version": CACHE_VERSION,
+            "last_date": _format_date(today),
+            "days": days,
+        }, cache_dir)
+        return days
+
+    if cache is None:
+        return full_fetch_and_save()
+
+    try:
+        last_date = _parse_date(cache.get("last_date", "2000-01-01"))
+    except (TypeError, ValueError):
+        return full_fetch_and_save()
+    gap_days = (today - last_date).days
+
+    if gap_days < 0 or gap_days > 30:
+        return full_fetch_and_save()
+
+    # Today is always dirty, so refresh it even when the cache is already current.
+    scan_start = today if gap_days == 0 else last_date + timedelta(days=1)
+    new_days = fetch_range(scan_start, today)
+
+    merged: dict[str, dict[str, float]] = {}
+    for date_key, value in cache.get("days", {}).items():
+        try:
+            parsed = _parse_date(date_key)
+        except (TypeError, ValueError):
+            continue
+        if cutoff <= parsed < scan_start and isinstance(value, dict):
+            merged[date_key] = value
+
+    day_count = (today - scan_start).days + 1
+    for index in range(day_count):
+        date_key = _format_date(scan_start + timedelta(days=index))
+        merged[date_key] = new_days.get(date_key, {})
+
+    save_chart_cache(api_key, {
+        "version": CACHE_VERSION,
+        "last_date": _format_date(today),
+        "days": merged,
+    }, cache_dir)
+    return merged
+
+
+def _parse_date(value: str):
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _format_date(value) -> str:
+    return value.strftime("%Y-%m-%d")
+
+
+def chart_token_value(value: float) -> float | int:
+    return int(value) if value == int(value) else value
+
+
+def build_chart_from_cache(daily: dict[str, dict[str, float]], period: str, language: str) -> dict[str, Any]:
+    day_count = {"7d": 7, "15d": 15, "30d": 30}.get(period, 7)
+    today = datetime.now().astimezone().date()
+    dates = [_format_date(today - timedelta(days=index)) for index in range(day_count - 1, -1, -1)]
+
+    buckets: list[dict[str, Any]] = []
+    for date_key in dates:
+        segments = []
+        for model, raw_tokens in sorted(daily.get(date_key, {}).items()):
+            tokens = numeric_value(raw_tokens)
+            if isinstance(model, str) and model and tokens is not None and tokens > 0:
+                segments.append({"model": model, "tokens": chart_token_value(tokens)})
+        buckets.append({"id": date_key, "label": date_key[5:], "segments": segments})
+
+    message = None
+    if not any(bucket["segments"] for bucket in buckets):
+        message = translate(language, "no_stats_data")
+
+    return {"kind": "line", "period": period, "bucketUnit": "day", "buckets": buckets, "message": message}
+
+
 def apply_aligned_model_series(
     payload: dict[str, Any],
     bucket_values: dict[str, dict[str, float]],
@@ -685,10 +836,10 @@ def main() -> int:
     if not items:
         return failure(translate(language, "no_quota_items"))
 
-    start_time, end_time, buckets, bucket_unit = stat_range(period)
+    _, _, buckets, bucket_unit = stat_range(period)
     try:
-        chart_payload = fetch_model_usage(api_key, start_time, end_time)
-        chart = build_chart(chart_payload, period, buckets, bucket_unit, language)
+        daily = maintain_chart_cache(api_key, language)
+        chart = build_chart_from_cache(daily, period, language)
     except Exception:
         chart = chart_message(translate(language, "stats_query_failed"), period, buckets, bucket_unit)
     return success(items, badge=badge, chart=chart)
