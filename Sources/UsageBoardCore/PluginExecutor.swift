@@ -24,7 +24,7 @@ public struct PluginExecutor: Sendable {
         self.timeoutSeconds = timeoutSeconds
     }
 
-    public func run(configuration: PluginConfiguration, displayName: String, language: AppLanguage = .zhHans) -> PluginSnapshot {
+    public func run(configuration: PluginConfiguration, displayName: String, language: AppLanguage) -> PluginSnapshot {
         guard configuration.enabled else {
             return PluginSnapshot(id: configuration.id, pluginName: configuration.name, displayName: displayName, iconURL: configuration.metadata?.icon)
         }
@@ -121,7 +121,7 @@ public struct PluginExecutor: Sendable {
                 chart: pluginOutput.chart
             )
         } catch {
-            if let errorOutput = try? JSONDecoder().decode(PluginOutputError.self, from: outputData),
+            if let errorOutput = try? UsageBoardJSON.decoder().decode(PluginOutputError.self, from: outputData),
                !errorOutput.error.isEmpty {
                 return failed(configuration: configuration, displayName: displayName, message: errorOutput.error)
             }

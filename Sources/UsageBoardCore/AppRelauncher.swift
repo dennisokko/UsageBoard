@@ -8,6 +8,9 @@ public enum AppRelauncher {
 
         let script = """
         #!/bin/bash
+        mkdir -p ~/Library/Logs/UsageBoard
+        exec 2>>~/Library/Logs/UsageBoard/relauncher.log
+        set -e
         while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
         open \(escapedCurrent)
         rm -f "$0"
@@ -23,20 +26,25 @@ public enum AppRelauncher {
         try process.run()
     }
 
-    public static func relaunch(replacingWith newBundleURL: URL) throws {
+    public static func relaunch(replacingWith newBundleURL: URL, cleanupDirectoryURL: URL? = nil) throws {
         let currentBundleURL = Bundle.main.bundleURL
         let pid = ProcessInfo.processInfo.processIdentifier
 
         let escapedCurrent = shellEscaped(currentBundleURL.path)
         let escapedNew = shellEscaped(newBundleURL.path)
+        let cleanupCommand = cleanupDirectoryURL.map { "rm -rf \(shellEscaped($0.path))" } ?? ":"
 
         let script = """
         #!/bin/bash
+        mkdir -p ~/Library/Logs/UsageBoard
+        exec 2>>~/Library/Logs/UsageBoard/relauncher.log
+        set -e
         while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
         rm -rf \(escapedCurrent)
         mv \(escapedNew) \(escapedCurrent)
         codesign --force --deep --sign - \(escapedCurrent) 2>/dev/null
         open \(escapedCurrent)
+        \(cleanupCommand)
         rm -f "$0"
         """
 

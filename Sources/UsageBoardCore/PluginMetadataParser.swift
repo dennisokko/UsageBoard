@@ -13,6 +13,7 @@ public enum PluginMetadataParser {
 
     public static func parse(text: String) -> PluginMetadata? {
         var isCollecting = false
+        var closed = false
         var lines: [String] = []
 
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false).prefix(80) {
@@ -27,12 +28,20 @@ public enum PluginMetadataParser {
             }
 
             if line.trimmingCharacters(in: .whitespaces).hasPrefix(endMarker) {
+                closed = true
                 break
             }
 
             if isCollecting {
                 lines.append(line)
             }
+        }
+
+        guard isCollecting && closed else {
+            if isCollecting {
+                fputs("UsageBoardPlugin: metadata block not closed with /UsageBoardPlugin\n", stderr)
+            }
+            return nil
         }
 
         let jsonText = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)

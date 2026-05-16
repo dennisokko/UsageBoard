@@ -181,7 +181,7 @@ public struct PluginParameterMetadata: Codable, Equatable, Identifiable, Sendabl
     public func localizedPlaceholder(language: AppLanguage) -> String? {
         let translated = placeholderTranslations[language.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let translated, !translated.isEmpty {
-            return placeholderTranslations[language.rawValue]
+            return translated
         }
         return placeholder
     }
@@ -361,6 +361,12 @@ public struct PluginChart: Codable, Equatable, Sendable {
     public var buckets: [PluginChartBucket]
     public var message: String?
 
+    private static let validBucketUnits: Set<String> = ["hour", "day"]
+
+    private static func normalizedBucketUnit(_ value: String) -> String {
+        validBucketUnits.contains(value) ? value : "day"
+    }
+
     public init(
         kind: String = "line",
         period: String,
@@ -370,9 +376,19 @@ public struct PluginChart: Codable, Equatable, Sendable {
     ) {
         self.kind = kind
         self.period = period
-        self.bucketUnit = bucketUnit
+        self.bucketUnit = Self.normalizedBucketUnit(bucketUnit)
         self.buckets = buckets
         self.message = message
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try container.decode(String.self, forKey: .kind)
+        self.period = try container.decode(String.self, forKey: .period)
+        let rawBucketUnit = try container.decode(String.self, forKey: .bucketUnit)
+        self.bucketUnit = Self.normalizedBucketUnit(rawBucketUnit)
+        self.buckets = try container.decode([PluginChartBucket].self, forKey: .buckets)
+        self.message = try container.decodeIfPresent(String.self, forKey: .message)
     }
 }
 

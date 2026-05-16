@@ -22,7 +22,7 @@ public struct BundledPluginInstaller: Sendable {
             at: sourceDirectoryURL,
             includingPropertiesForKeys: nil
         )
-        .filter { $0.pathExtension == "py" }
+        .filter { $0.pathExtension == "py" && !$0.lastPathComponent.hasPrefix("_") }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
         var installed: [URL] = []
@@ -38,7 +38,6 @@ public struct BundledPluginInstaller: Sendable {
             if existingDestination != nil || fileManager.fileExists(atPath: destinationURL.path) {
                 try fileManager.removeItem(at: destinationURL)
             }
-
             try fileManager.createSymbolicLink(at: destinationURL, withDestinationURL: sourceURL)
             installed.append(destinationURL)
         }

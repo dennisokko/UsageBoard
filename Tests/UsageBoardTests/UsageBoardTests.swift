@@ -29,6 +29,24 @@ final class UsageBoardTests: XCTestCase {
         XCTAssertEqual(store.pluginsDirectoryURL(), directory.appendingPathComponent("plugins", isDirectory: true))
     }
 
+    func testPluginStateStoreSavesAndClampsRefreshInterval() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
+        let store = PluginStateStore(directoryURL: directory)
+        let state = PluginCachedState(
+            updatedAt: Date().addingTimeInterval(-1),
+            items: [
+                UsageItem(id: "a", name: "A", used: 1, limit: 2, displayStyle: .ratio)
+            ]
+        )
+
+        try store.save(stateID: "plugin", state: state)
+
+        XCTAssertNotNil(store.load(stateID: "plugin"))
+        XCTAssertFalse(store.needsRefresh(stateID: "plugin", intervalSeconds: 0))
+        XCTAssertFalse(store.needsRefresh(stateID: "plugin", intervalSeconds: -10))
+    }
+
     func testBundledPluginInstallerCreatesSymlinks() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
@@ -220,7 +238,7 @@ final class UsageBoardTests: XCTestCase {
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
 
         let configuration = PluginConfiguration(name: "Chart", executablePath: scriptURL.path)
-        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Chart")
+        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Chart", language: .zhHans)
 
         XCTAssertEqual(snapshot.chart?.period, "7d")
         XCTAssertEqual(snapshot.chart?.buckets.first?.segments.first?.model, "glm-4.5")
@@ -399,7 +417,7 @@ final class UsageBoardTests: XCTestCase {
             executablePath: "/bin/echo"
         )
 
-        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Bad")
+        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Bad", language: .zhHans)
         guard case .failed(let message) = snapshot.state else {
             XCTFail("Expected failed snapshot")
             return
@@ -417,7 +435,7 @@ final class UsageBoardTests: XCTestCase {
         """.write(to: script, atomically: true, encoding: .utf8)
 
         let configuration = PluginConfiguration(name: "Bad", executablePath: script.path)
-        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Bad")
+        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Bad", language: .zhHans)
 
         guard case .failed(let message) = snapshot.state else {
             XCTFail("Expected failed snapshot")
@@ -449,7 +467,7 @@ final class UsageBoardTests: XCTestCase {
         """.write(to: script, atomically: true, encoding: .utf8)
 
         let configuration = PluginConfiguration(name: "Encoding", executablePath: script.path)
-        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Encoding")
+        let snapshot = PluginExecutor(timeoutSeconds: 2).run(configuration: configuration, displayName: "Encoding", language: .zhHans)
 
         guard case .ready = snapshot.state else {
             XCTFail("Expected ready snapshot, got \(snapshot.state)")
@@ -476,7 +494,7 @@ final class UsageBoardTests: XCTestCase {
         """.write(to: script, atomically: true, encoding: .utf8)
 
         let config = PluginConfiguration(name: "Big", executablePath: script.path)
-        let snapshot = PluginExecutor(timeoutSeconds: 3).run(configuration: config, displayName: "Big")
+        let snapshot = PluginExecutor(timeoutSeconds: 3).run(configuration: config, displayName: "Big", language: .zhHans)
 
         guard case .ready = snapshot.state else {
             XCTFail("Expected .ready, got \(snapshot.state)"); return
@@ -495,7 +513,7 @@ final class UsageBoardTests: XCTestCase {
         """.write(to: script, atomically: true, encoding: .utf8)
 
         let config = PluginConfiguration(name: "Test", executablePath: script.path)
-        let snapshot = PluginExecutor(timeoutSeconds: 5).run(configuration: config, displayName: "Test")
+        let snapshot = PluginExecutor(timeoutSeconds: 5).run(configuration: config, displayName: "Test", language: .zhHans)
 
         guard case .failed(let message) = snapshot.state else {
             XCTFail("Expected .failed, got \(snapshot.state)"); return
