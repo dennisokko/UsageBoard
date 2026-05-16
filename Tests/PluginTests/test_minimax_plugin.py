@@ -55,8 +55,12 @@ def run_plugin_with_interpreter(interpreter: Path) -> dict:
         f"""
         import importlib.util
         import sys
+        from pathlib import Path
 
         plugin_path = {str(PLUGIN_PATH)!r}
+        plugin_dir = str(Path(plugin_path).parent)
+        if plugin_dir not in sys.path:
+            sys.path.insert(0, plugin_dir)
         payload = {payload!r}
 
         spec = importlib.util.spec_from_file_location("minimax_plugin", plugin_path)

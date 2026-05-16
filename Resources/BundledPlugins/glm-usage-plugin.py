@@ -40,6 +40,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -47,102 +48,38 @@ import urllib.request
 from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from _common import (  # noqa: E402
+    app_language,
+    color_for_pct,
+    failure,
+    handle_http_error,
+    handle_url_error,
+    make_translator,
+    parse_usageboard_params,
+    success,
+    utc_now_iso,
+)
+
 
 QUOTA_ENDPOINT = "https://open.bigmodel.cn/api/monitor/usage/quota/limit"
 MODEL_USAGE_ENDPOINT = "https://bigmodel.cn/api/monitor/usage/model-usage"
-SCHEMA_VERSION = 1
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    index = 0
-    while index < len(argv):
-        if argv[index] == "--usageboard-param" and index + 1 < len(argv):
-            key_value = argv[index + 1]
-            if "=" in key_value:
-                key, value = key_value.split("=", 1)
-                if key:
-                    values[key] = value
-            index += 2
-        else:
-            index += 1
-    return values
-
-
-def get_api_key(argv: list[str]) -> str | None:
-    params = parse_usageboard_params(argv)
-    return params.get("API_KEY")
-
-
-def get_stat_period(argv: list[str]) -> str:
-    params = parse_usageboard_params(argv)
-    period = params.get("STAT_PERIOD", "7d").lower()
-    return period if period in ("7d", "15d", "30d") else "7d"
-
-
-def get_app_language(argv: list[str]) -> str:
-    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
-
 
 TRANSLATIONS = {
-    "period_5h": {
-        "zh-Hans": "5小时",
-        "en": "5 hours",
-    },
-    "period_week": {
-        "zh-Hans": "周",
-        "en": "week",
-    },
-    "period_month": {
-        "zh-Hans": "月",
-        "en": "month",
-    },
-    "tool_calls": {
-        "zh-Hans": "工具调用",
-        "en": "Tool calls",
-    },
-    "text_generation": {
-        "zh-Hans": "文本生成",
-        "en": "Text generation",
-    },
-    "five_hour_usage": {
-        "zh-Hans": "5 小时用量",
-        "en": "5-hour usage",
-    },
-    "weekly_usage": {
-        "zh-Hans": "周用量",
-        "en": "Weekly usage",
-    },
-    "mcp_month_usage": {
-        "zh-Hans": "MCP 月用量",
-        "en": "MCP monthly usage",
-    },
-    "no_stats_data": {
-        "zh-Hans": "暂无可用统计数据",
-        "en": "No stats data available",
-    },
-    "missing_api_key":    {"zh-Hans": "请在插件设置中配置 API Key",          "en": "Configure API Key in plugin settings"},
-    "no_quota_items":     {"zh-Hans": "未获取到配额数据",                     "en": "No quota data found."},
-    "stats_query_failed": {"zh-Hans": "统计数据查询失败",                      "en": "Failed to query stats data"},
-    "request_timeout":    {"zh-Hans": "请求超时，请检查网络",                  "en": "Request timed out. Check your network."},
-    "http_401":           {"zh-Hans": "API Key 无效，请检查配置",             "en": "Invalid API Key. Check your settings."},
-    "http_403":           {"zh-Hans": "账号无权限访问",                        "en": "Access denied. Check your plan."},
-    "http_429":           {"zh-Hans": "请求频率超限，请稍后重试",               "en": "Rate limited. Try again later."},
-    "http_5xx":           {"zh-Hans": "服务暂时不可用 (HTTP {code})",         "en": "Service unavailable (HTTP {code})"},
-    "http_other":         {"zh-Hans": "请求失败 (HTTP {code})",              "en": "Request failed (HTTP {code})"},
-    "network_error":      {"zh-Hans": "网络连接失败，请检查网络",               "en": "Network error. Check your connection."},
+    "period_5h":       {"zh-Hans": "5小时",     "en": "5 hours"},
+    "period_week":     {"zh-Hans": "周",        "en": "week"},
+    "period_month":    {"zh-Hans": "月",        "en": "month"},
+    "tool_calls":      {"zh-Hans": "工具调用",   "en": "Tool calls"},
+    "text_generation": {"zh-Hans": "文本生成",   "en": "Text generation"},
+    "five_hour_usage": {"zh-Hans": "5 小时用量", "en": "5-hour usage"},
+    "weekly_usage":    {"zh-Hans": "周用量",     "en": "Weekly usage"},
+    "mcp_month_usage": {"zh-Hans": "MCP 月用量", "en": "MCP monthly usage"},
+    "no_stats_data":   {"zh-Hans": "暂无可用统计数据", "en": "No stats data available"},
+    "no_quota_items":  {"zh-Hans": "未获取到配额数据", "en": "No quota data found."},
+    "stats_query_failed": {"zh-Hans": "统计数据查询失败", "en": "Failed to query stats data"},
 }
 
-
-def translate(language: str, key: str, **kwargs) -> str:
-    values = TRANSLATIONS.get(key, {})
-    text = values.get(language) or values.get("zh-Hans") or key
-    return text.format(**kwargs) if kwargs else text
-
+translate = make_translator(TRANSLATIONS)
 
 def fetch_limits(api_key: str) -> dict[str, Any]:
     request = urllib.request.Request(
@@ -270,7 +207,10 @@ def period_for(limit: dict[str, Any], language: str) -> tuple[str, str] | None:
 
 
 def quota_kind(limit: dict[str, Any], language: str) -> tuple[str, str]:
-    text = json.dumps(limit, ensure_ascii=False).lower()
+    if "currentValue" in limit or "usage" in limit:
+        return "tool", translate(language, "tool_calls")
+
+    text = quota_kind_text(limit)
     tool_markers = ("tool", "工具", "function", "mcp")
     text_markers = ("token", "text", "文本")
 
@@ -278,9 +218,32 @@ def quota_kind(limit: dict[str, Any], language: str) -> tuple[str, str]:
         return "tool", translate(language, "tool_calls")
     if any(marker in text for marker in text_markers):
         return "text", translate(language, "text_generation")
-    if "currentValue" in limit or "usage" in limit:
-        return "tool", translate(language, "tool_calls")
     return "text", translate(language, "text_generation")
+
+
+def quota_kind_text(limit: dict[str, Any]) -> str:
+    keys = (
+        "type",
+        "kind",
+        "category",
+        "name",
+        "displayName",
+        "description",
+        "quotaName",
+        "quotaType",
+        "resource",
+        "resourceName",
+        "resourceType",
+        "service",
+        "usageName",
+        "usageType",
+    )
+    values: list[str] = []
+    for key in keys:
+        value = limit.get(key)
+        if isinstance(value, str):
+            values.append(value)
+    return " ".join(values).lower()
 
 
 def usage_for(limit: dict[str, Any], kind: str) -> tuple[float, float, str]:
@@ -299,6 +262,7 @@ def item(
     reset_at: str | None,
     display_style: str = "percent",
 ) -> dict[str, Any]:
+    # status thresholds: 90+ critical, 75+ warning — intentionally stricter than color thresholds
     status = "unknown"
     pct = used / limit * 100 if limit > 0 else 0
     if pct >= 90:
@@ -316,7 +280,7 @@ def item(
         "displayStyle": display_style,
         "resetAt": reset_at,
         "status": status,
-        "color": color_for_percentage(pct),
+        "color": color_for_pct(pct),
     }
 
 
@@ -677,40 +641,23 @@ def chart_message(message: str, period: str, buckets: list[datetime], bucket_uni
     }
 
 
-def success(items: list[dict[str, Any]], badge: str | None = None, chart: dict[str, Any] | None = None) -> int:
-    result: dict[str, Any] = {
-        "schemaVersion": SCHEMA_VERSION,
-        "updatedAt": utc_now_iso(),
-        "items": items,
-    }
-    if badge:
-        result["badge"] = badge
-    if chart:
-        result["chart"] = chart
-    print(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
-def failure(message: str, language: str) -> int:
-    print(json.dumps({"error": message}, ensure_ascii=False))
-    return 0
-
-
 def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
     api_key = params.get("API_KEY")
     period = params.get("STAT_PERIOD", "7d").lower()
     if period not in ("7d", "15d", "30d"):
         period = "7d"
-    language = "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
+    language = app_language(params)
+    translate = make_translator(TRANSLATIONS)
+
     if not api_key:
-        return failure(translate(language, "missing_api_key"), language)
+        return failure(translate(language, "missing_api_key"))
 
     try:
         payload = fetch_limits(api_key)
         items, badge = build_items(payload, language)
         if not items:
-            return failure(translate(language, "no_quota_items"), language)
+            return failure(translate(language, "no_quota_items"))
         start_time, end_time, buckets, bucket_unit = stat_range(period)
         try:
             chart_payload = fetch_model_usage(api_key, start_time, end_time)
@@ -719,21 +666,13 @@ def main() -> int:
             chart = chart_message(translate(language, "stats_query_failed"), period, buckets, bucket_unit)
         return success(items, badge=badge, chart=chart)
     except urllib.error.HTTPError as error:
-        if error.code == 401:
-            return failure(translate(language, "http_401"), language)
-        if error.code == 403:
-            return failure(translate(language, "http_403"), language)
-        if error.code == 429:
-            return failure(translate(language, "http_429"), language)
-        if error.code >= 500:
-            return failure(translate(language, "http_5xx", code=error.code), language)
-        return failure(translate(language, "http_other", code=error.code), language)
-    except urllib.error.URLError:
-        return failure(translate(language, "network_error"), language)
+        return handle_http_error(error, translate, language)
+    except urllib.error.URLError as error:
+        return handle_url_error(error, translate, language)
     except TimeoutError:
-        return failure(translate(language, "request_timeout"), language)
+        return failure(translate(language, "request_timeout"))
     except Exception:
-        return failure(translate(language, "network_error"), language)
+        return failure(translate(language, "network_error"))
 
 
 if __name__ == "__main__":

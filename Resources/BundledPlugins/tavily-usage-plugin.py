@@ -27,87 +27,31 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from calendar import monthrange
 from typing import Any
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from _common import (  # noqa: E402
+    app_language,
+    color_for,
+    failure,
+    get_app_language,
+    handle_http_error,
+    handle_url_error,
+    make_translator,
+    numeric,
+    parse_usageboard_params,
+    status_for,
+    success,
+    utc_now_iso,
+)
 
 
 ENDPOINT = "https://api.tavily.com/usage"
-SCHEMA_VERSION = 1
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    index = 0
-    while index < len(argv):
-        if argv[index] == "--usageboard-param" and index + 1 < len(argv):
-            key_value = argv[index + 1]
-            if "=" in key_value:
-                key, value = key_value.split("=", 1)
-                if key:
-                    values[key] = value
-            index += 2
-        else:
-            index += 1
-    return values
-
-
-def get_api_key(argv: list[str]) -> str | None:
-    return parse_usageboard_params(argv).get("API_KEY")
-
-
-def get_app_language(argv: list[str]) -> str:
-    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
-
-
-TRANSLATIONS = {
-    "total_usage": {
-        "zh-Hans": "总用量",
-        "en": "Total usage",
-    },
-    "search": {
-        "zh-Hans": "搜索",
-        "en": "Search",
-    },
-    "crawl": {
-        "zh-Hans": "爬取",
-        "en": "Crawl",
-    },
-    "extract": {
-        "zh-Hans": "提取",
-        "en": "Extract",
-    },
-    "map": {
-        "zh-Hans": "地图",
-        "en": "Map",
-    },
-    "research": {
-        "zh-Hans": "研究",
-        "en": "Research",
-    },
-    "missing_api_key":  {"zh-Hans": "请在插件设置中配置 API Key",              "en": "Configure API Key in plugin settings"},
-    "no_quota_items":   {"zh-Hans": "未获取到用量数据",                         "en": "No usage data found."},
-    "request_timeout":  {"zh-Hans": "请求超时，请检查网络",                      "en": "Request timed out. Check your network."},
-    "http_401":         {"zh-Hans": "API Key 无效，请检查配置",                 "en": "Invalid API Key. Check your settings."},
-    "http_403":         {"zh-Hans": "API Key 无权访问，请检查配置",              "en": "API Key access denied. Check your settings."},
-    "http_429":         {"zh-Hans": "请求频率超限，请稍后重试",                   "en": "Rate limited. Try again later."},
-    "http_5xx":         {"zh-Hans": "服务暂时不可用 (HTTP {code})",            "en": "Service unavailable (HTTP {code})"},
-    "http_other":       {"zh-Hans": "请求失败 (HTTP {code})",                 "en": "Request failed (HTTP {code})"},
-    "network_error":    {"zh-Hans": "网络连接失败，请检查网络",                   "en": "Network error. Check your connection."},
-}
-
-
-def translate(language: str, key: str, **kwargs) -> str:
-    values = TRANSLATIONS.get(key, {})
-    text = values.get(language) or values.get("zh-Hans") or key
-    return text.format(**kwargs) if kwargs else text
 
 
 def fetch_usage(api_key: str) -> dict[str, Any]:
@@ -118,40 +62,10 @@ def fetch_usage(api_key: str) -> dict[str, Any]:
 
 def next_month_start_iso() -> str:
     now = datetime.now(timezone.utc)
-    year = now.year + (1 if now.month == 12 else 0)
-    month = (now.month % 12) + 1
-    return datetime(year, month, 1, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-def numeric(value: Any) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return 0
-    return 0
-
-
-def status_for(used: float, total: float) -> str:
-    pct = used / total * 100 if total > 0 else 0
-    if pct >= 90:
-        return "critical"
-    if pct >= 75:
-        return "warning"
-    return "normal"
-
-
-def color_for(used: float, total: float) -> str:
-    pct = used / total * 100 if total > 0 else 0
-    if pct >= 90:
-        return "red"
-    if pct >= 80:
-        return "orange"
-    if pct >= 60:
-        return "yellow"
-    return "blue"
+    next_month = now.month + 1 if now.month < 12 else 1
+    next_year = now.year if now.month < 12 else now.year + 1
+    reset = datetime(next_year, next_month, 1, tzinfo=timezone.utc)
+    return reset.isoformat().replace("+00:00", "Z")
 
 
 def item(item_id: str, name: str, used: float, total: float, color: str = "blue", reset_at: str | None = None) -> dict[str, Any]:
@@ -167,7 +81,7 @@ def item(item_id: str, name: str, used: float, total: float, color: str = "blue"
     }
 
 
-def build_items(payload: dict[str, Any], language: str) -> list[dict[str, Any]]:
+def build_items(payload: dict[str, Any], language: str, translate: Any) -> list[dict[str, Any]]:
     account = payload.get("account", {})
     if not isinstance(account, dict):
         return []
@@ -203,43 +117,38 @@ def build_items(payload: dict[str, Any], language: str) -> list[dict[str, Any]]:
     return output
 
 
-def success(items: list[dict[str, Any]]) -> int:
-    print(json.dumps({"schemaVersion": SCHEMA_VERSION, "updatedAt": utc_now_iso(), "items": items}, ensure_ascii=False))
-    return 0
-
-
-def failure(message: str, language: str) -> int:
-    print(json.dumps({"error": message}, ensure_ascii=False))
-    return 0
-
-
 def main() -> int:
-    api_key = get_api_key(sys.argv[1:])
+    params = parse_usageboard_params(sys.argv[1:])
     language = get_app_language(sys.argv[1:])
+    translate = make_translator({
+        "total_usage":  {"zh-Hans": "总用量", "en": "Total usage"},
+        "search":       {"zh-Hans": "搜索",   "en": "Search"},
+        "crawl":        {"zh-Hans": "爬取",   "en": "Crawl"},
+        "extract":      {"zh-Hans": "提取",   "en": "Extract"},
+        "map":          {"zh-Hans": "地图",   "en": "Map"},
+        "research":     {"zh-Hans": "研究",   "en": "Research"},
+        "no_quota_items": {"zh-Hans": "未获取到用量数据", "en": "No usage data found."},
+    })
+
+    api_key = params.get("API_KEY")
     if not api_key:
-        return failure(translate(language, "missing_api_key"), language)
+        return failure(translate(language, "missing_api_key"))
 
     try:
-        items = build_items(fetch_usage(api_key), language)
+        items = build_items(fetch_usage(api_key), language, translate)
         if not items:
-            return failure(translate(language, "no_quota_items"), language)
+            return failure(translate(language, "no_quota_items"))
         return success(items)
     except urllib.error.HTTPError as error:
-        if error.code == 401:
-            return failure(translate(language, "http_401"), language)
-        if error.code == 403:
-            return failure(translate(language, "http_403"), language)
-        if error.code == 429:
-            return failure(translate(language, "http_429"), language)
-        if error.code >= 500:
-            return failure(translate(language, "http_5xx", code=error.code), language)
-        return failure(translate(language, "http_other", code=error.code), language)
-    except urllib.error.URLError:
-        return failure(translate(language, "network_error"), language)
+        return handle_http_error(error, translate, language)
+    except urllib.error.URLError as error:
+        return handle_url_error(error, translate, language)
     except TimeoutError:
-        return failure(translate(language, "request_timeout"), language)
+        return failure(translate(language, "request_timeout"))
+    except json.JSONDecodeError:
+        return failure(translate(language, "network_error"))
     except Exception:
-        return failure(translate(language, "network_error"), language)
+        return failure(translate(language, "network_error"))
 
 
 if __name__ == "__main__":

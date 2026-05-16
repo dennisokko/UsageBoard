@@ -12,6 +12,9 @@ PLUGIN_PATH = Path(__file__).parent.parent.parent / "Resources" / "BundledPlugin
 
 
 def load_plugin():
+    plugin_dir = str(PLUGIN_PATH.parent)
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
     spec = importlib.util.spec_from_file_location("deepseek_plugin", PLUGIN_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -55,7 +58,7 @@ class TestErrorFormat(unittest.TestCase):
 
 
 class TestColorForBalance(unittest.TestCase):
-    """color_for_balance(balance, limit): ratio<=10% red, <=20% orange, <=40% yellow, else None."""
+    """color_for_balance(balance, limit): ratio<=10% red, <=20% orange, <=40% yellow, else blue."""
 
     def test_zero_balance_is_red(self):
         self.assertEqual(plugin.color_for_balance(0, 100), "red")
@@ -72,11 +75,11 @@ class TestColorForBalance(unittest.TestCase):
     def test_at_40_percent_boundary_is_yellow(self):
         self.assertEqual(plugin.color_for_balance(40, 100), "yellow")
 
-    def test_above_40_percent_is_none(self):
-        self.assertIsNone(plugin.color_for_balance(41, 100))
+    def test_above_40_percent_is_blue(self):
+        self.assertEqual(plugin.color_for_balance(41, 100), "blue")
 
-    def test_above_limit_is_none(self):
-        self.assertIsNone(plugin.color_for_balance(150, 100))
+    def test_above_limit_is_blue(self):
+        self.assertEqual(plugin.color_for_balance(150, 100), "blue")
 
     def test_custom_limit_scales_thresholds(self):
         # With limit=200, 30 is 15% → orange (was yellow under 100-default before fix)

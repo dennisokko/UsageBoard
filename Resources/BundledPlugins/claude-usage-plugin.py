@@ -68,53 +68,22 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 from urllib import request as urllib_request
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from _common import (  # noqa: E402
+    app_language as _app_language,
+    color_for_pct,
+    failure,
+    make_translator,
+    parse_usageboard_params,
+    success,
+    utc_now_iso,
+)
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 PLAN_5H = {"pro": 44_000, "max5": 88_000, "max20": 220_000}
 CACHE_VERSION = 2
 CACHE_FILENAME = ".usageboard-chart-cache.json"
-
-TRANSLATIONS = {
-    "five_hour":     {"en": "5-hour usage",                                             "zh-Hans": "5 小时用量"},
-    "weekly":        {"en": "Weekly usage",                                              "zh-Hans": "周用量"},
-    "design_weekly": {"en": "Design weekly usage",                                       "zh-Hans": "Design 周用量"},
-    "no_data_dir":   {"en": "~/.claude not found. Install Claude Code CLI first.",       "zh-Hans": "~/.claude 目录不存在，请先安装 Claude Code CLI"},
-    "login_hint":    {"en": "Not signed in. Run claude to sign in.",                     "zh-Hans": "未找到登录凭证，请运行 claude 登录"},
-    "api_error":     {"en": "API request failed. Check your network.",                   "zh-Hans": "API 请求失败，请检查网络"},
-    "api_401":       {"en": "Credentials expired. Sign in again.",                       "zh-Hans": "登录凭证已失效，请重新登录"},
-    "api_5xx":       {"en": "Service unavailable (HTTP {code})",                        "zh-Hans": "服务暂时不可用 (HTTP {code})"},
-    "no_stats_data": {"en": "No stats data available",                                   "zh-Hans": "暂无可用统计数据"},
-}
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def parse_usageboard_params():
-    params = {}
-    argv = sys.argv[1:]
-    i = 0
-    while i < len(argv):
-        if argv[i] == "--usageboard-param" and i + 1 < len(argv):
-            kv = argv[i + 1].split("=", 1)
-            if len(kv) == 2:
-                params[kv[0]] = kv[1]
-            i += 2
-        else:
-            i += 1
-    return params
-
-def app_language(params):
-    lang = params.get("USAGEBOARD_LANGUAGE", "en")
-    return "zh-Hans" if "zh" in lang else "en"
-
-def translate(lang, key, **kwargs):
-    text = TRANSLATIONS.get(key, {}).get(lang, key)
-    return text.format(**kwargs) if kwargs else text
-
-def color_for(pct):
-    if pct >= 90: return "red"
-    if pct >= 80: return "orange"
-    if pct >= 60: return "yellow"
-    return "blue"
 
 def status_for(pct):
     if pct >= 90: return "critical"
@@ -127,9 +96,6 @@ def to_k(tokens):
 def utc_now():
     return datetime.now(timezone.utc)
 
-def utc_now_iso():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
 def local_today():
     return datetime.now().strftime("%Y-%m-%d")
 
@@ -138,16 +104,18 @@ def is_claude_model(model_name):
 
 SCHEMA_VERSION = 1
 
-def success(items, chart=None, badge=None):
-    out = {"schemaVersion": SCHEMA_VERSION, "updatedAt": utc_now_iso(), "items": items}
-    if chart is not None:
-        out["chart"] = chart
-    if badge is not None:
-        out["badge"] = badge
-    print(json.dumps(out, ensure_ascii=False))
-
-def failure(message):
-    print(json.dumps({"error": message}, ensure_ascii=False))
+def _translate(lang):
+    return make_translator({
+        "five_hour":     {"en": "5-hour usage",                                             "zh-Hans": "5 小时用量"},
+        "weekly":        {"en": "Weekly usage",                                              "zh-Hans": "周用量"},
+        "design_weekly": {"en": "Design weekly usage",                                       "zh-Hans": "Design 周用量"},
+        "no_data_dir":   {"en": "~/.claude not found. Install Claude Code CLI first.",       "zh-Hans": "~/.claude 目录不存在，请先安装 Claude Code CLI"},
+        "login_hint":    {"en": "Not signed in. Run claude to sign in.",                     "zh-Hans": "未找到登录凭证，请运行 claude 登录"},
+        "api_error":     {"en": "API request failed. Check your network.",                   "zh-Hans": "API 请求失败，请检查网络"},
+        "api_401":       {"en": "Credentials expired. Sign in again.",                       "zh-Hans": "登录凭证已失效，请重新登录"},
+        "api_5xx":       {"en": "Service unavailable (HTTP {code})",                        "zh-Hans": "服务暂时不可用 (HTTP {code})"},
+        "no_stats_data": {"en": "No stats data available",                                   "zh-Hans": "暂无可用统计数据"},
+    })
 
 # ─── OAuth ────────────────────────────────────────────────────────────────────
 
@@ -189,7 +157,7 @@ def fetch_oauth_usage(token):
     except Exception:
         return None, None
 
-def build_items_from_oauth(data, lang, params, daily):
+def build_items_from_oauth(data, lang, params, daily, translate):
     fh = data.get("five_hour", {})
     sd = data.get("seven_day", {})
     design_week = data.get("seven_day_omelette", {})
@@ -221,7 +189,7 @@ def build_items_from_oauth(data, lang, params, daily):
             "used": round(min(fh_pct, 100), 1),
             "limit": 100,
             "resetAt": fh_resets,
-            "color": color_for(fh_pct),
+            "color": color_for_pct(fh_pct),
             "status": status_for(fh_pct),
         },
         {
@@ -231,7 +199,7 @@ def build_items_from_oauth(data, lang, params, daily):
             "used": round(min(sd_pct, 100), 1),
             "limit": 100,
             "resetAt": sd_resets,
-            "color": color_for(sd_pct),
+            "color": color_for_pct(sd_pct),
             "status": status_for(sd_pct),
         },
     ]
@@ -245,7 +213,7 @@ def build_items_from_oauth(data, lang, params, daily):
             "used": round(min(design_pct, 100), 1),
             "limit": 100,
             "resetAt": design_week.get("resets_at"),
-            "color": color_for(design_pct),
+            "color": color_for_pct(design_pct),
             "status": status_for(design_pct),
         })
 
@@ -355,8 +323,8 @@ def maintain_cache(data_dir):
     now = utc_now()
 
     def full_scan_and_save():
-        start_dt = datetime.combine(cutoff, datetime.min.time(), tzinfo=now.astimezone().tzinfo) - timedelta(hours=14)
-        records = parse_records(all_jsonl_files(data_dir), start_dt, now)
+        scan_start_utc = datetime(cutoff.year, cutoff.month, cutoff.day, tzinfo=timezone.utc) - timedelta(hours=14)
+        records = parse_records(all_jsonl_files(data_dir), scan_start_utc, now)
         by_day = group_by_local_date(records)
         days = {d: by_day.get(d, {}) for d in
                 (_format_date(cutoff + timedelta(days=i)) for i in range(30))
@@ -379,10 +347,10 @@ def maintain_cache(data_dir):
 
     # Today is always dirty — re-scan it. If gap_days >= 1, also scan the missed days.
     scan_start = today if gap_days == 0 else last_date + timedelta(days=1)
-    start_dt = datetime.combine(scan_start, datetime.min.time(), tzinfo=now.astimezone().tzinfo) - timedelta(hours=14)
-    cutoff_ts = start_dt.timestamp()
+    scan_start_utc = datetime(scan_start.year, scan_start.month, scan_start.day, tzinfo=timezone.utc) - timedelta(hours=14)
+    cutoff_ts = scan_start_utc.timestamp()
     recent_files = [f for f in all_jsonl_files(data_dir) if os.path.getmtime(f) >= cutoff_ts]
-    records = parse_records(recent_files, start_dt, now)
+    records = parse_records(recent_files, scan_start_utc, now)
     new_days = group_by_local_date(records)
 
     merged = {}
@@ -416,7 +384,7 @@ def sum_tokens(daily, date_list, claude_only):
 
 # ─── Chart ────────────────────────────────────────────────────────────────────
 
-def build_chart(params, daily, lang):
+def build_chart(params, daily, lang, translate):
     stat_period = params.get("STAT_PERIOD", "7d")
     claude_only = params.get("CLAUDE_ONLY", "false").lower() == "true"
     stat_days = {"7d": 7, "15d": 15, "30d": 30}.get(stat_period, 7)
@@ -446,9 +414,10 @@ def build_chart(params, daily, lang):
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 def main():
-    params = parse_usageboard_params()
-    lang = app_language(params)
-    data_dir = params.get("DATA_DIR", "~/.claude")
+    params = parse_usageboard_params(sys.argv[1:])
+    lang = _app_language(params)
+    translate = _translate(lang)
+    data_dir = os.path.realpath(os.path.expanduser(params.get("DATA_DIR", "~/.claude")))
 
     if not os.path.isdir(os.path.expanduser(data_dir)):
         failure(translate(lang, "no_data_dir"))
@@ -470,11 +439,17 @@ def main():
         return
 
     daily = maintain_cache(data_dir)
-    items = build_items_from_oauth(oauth_data, lang, params, daily)
+    items = build_items_from_oauth(oauth_data, lang, params, daily, translate)
     badge = str(oauth_data.get("plan_type", params.get("PLAN", "pro"))).capitalize()
-    chart = build_chart(params, daily, lang)
+    chart = build_chart(params, daily, lang, translate)
 
     success(items, chart=chart, badge=badge)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(json.dumps({"error": str(e)}, ensure_ascii=False))
+        sys.exit(1)

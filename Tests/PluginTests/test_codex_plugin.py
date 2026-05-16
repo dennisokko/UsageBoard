@@ -1,6 +1,7 @@
 """Tests for codex-usage-plugin.py — run with: python3 -m pytest Tests/PluginTests/test_codex_plugin.py"""
 
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,9 @@ PLUGIN_PATH = Path(__file__).parent.parent.parent / "Resources" / "BundledPlugin
 
 
 def load_plugin():
+    plugin_dir = str(PLUGIN_PATH.parent)
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
     spec = importlib.util.spec_from_file_location("codex_plugin", PLUGIN_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

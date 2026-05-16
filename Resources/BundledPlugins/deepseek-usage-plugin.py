@@ -37,15 +37,25 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from _common import (  # noqa: E402
+    failure,
+    handle_http_error,
+    handle_url_error,
+    make_translator,
+    parse_usageboard_params,
+    success,
+    utc_now_iso,
+)
 
 
 ENDPOINT = "https://api.deepseek.com/user/balance"
 DEFAULT_LIMIT = 100.0
-SCHEMA_VERSION = 1
 
 
 def color_for_balance(balance: float, limit: float) -> str | None:
@@ -69,50 +79,7 @@ def parse_limit(raw: str) -> float:
     return value if value > 0 else DEFAULT_LIMIT
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    index = 0
-    while index < len(argv):
-        if argv[index] == "--usageboard-param" and index + 1 < len(argv):
-            key_value = argv[index + 1]
-            if "=" in key_value:
-                key, value = key_value.split("=", 1)
-                if key:
-                    values[key] = value
-            index += 2
-        else:
-            index += 1
-    return values
-
-
-def app_language(params: dict[str, str]) -> str:
-    return "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
-
-
-TRANSLATIONS = {
-    "balance":          {"zh-Hans": "余额",                              "en": "Balance"},
-    "missing_api_key":  {"zh-Hans": "请在插件设置中配置 API Key",          "en": "Configure API Key in plugin settings"},
-    "http_401":         {"zh-Hans": "API Key 无效，请检查配置",            "en": "Invalid API Key. Check your settings."},
-    "http_403":         {"zh-Hans": "账号无权限访问",                      "en": "Access denied. Check your plan."},
-    "http_429":         {"zh-Hans": "请求频率超限，请稍后重试",              "en": "Rate limited. Try again later."},
-    "http_5xx":         {"zh-Hans": "服务暂时不可用 (HTTP {code})",        "en": "Service unavailable (HTTP {code})"},
-    "http_other":       {"zh-Hans": "请求失败 (HTTP {code})",             "en": "Request failed (HTTP {code})"},
-    "request_timeout":  {"zh-Hans": "请求超时，请检查网络",                 "en": "Request timed out. Check your network."},
-    "network_error":    {"zh-Hans": "网络连接失败，请检查网络",              "en": "Network error. Check your connection."},
-}
-
-
-def translate(language: str, key: str, **kwargs) -> str:
-    values = TRANSLATIONS.get(key, {})
-    text = values.get(language) or values.get("zh-Hans") or key
-    return text.format(**kwargs) if kwargs else text
-
-
-def fetch_balance(api_key: str, language: str, limit_amount: float) -> list[dict]:
+def fetch_balance(api_key: str, language: str, limit_amount: float, translate: Any) -> list[dict]:
     request = urllib.request.Request(
         ENDPOINT,
         headers={
@@ -121,7 +88,13 @@ def fetch_balance(api_key: str, language: str, limit_amount: float) -> list[dict
         },
     )
     with urllib.request.urlopen(request, timeout=10) as response:
-        data = json.loads(response.read())
+        if response.status != 200:
+            raise ValueError(f"Unexpected HTTP {response.status}")
+        body = response.read()
+        try:
+            data = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            raise ValueError("Invalid JSON response from DeepSeek API")
 
     items: list[dict] = []
     for info in data.get("balance_infos", []):
@@ -140,36 +113,25 @@ def fetch_balance(api_key: str, language: str, limit_amount: float) -> list[dict
     return items
 
 
-def success(items: list[dict]) -> int:
-    print(json.dumps({"schemaVersion": SCHEMA_VERSION, "updatedAt": utc_now_iso(), "items": items}, ensure_ascii=False))
-    return 0
-
-
-def failure(message: str) -> int:
-    print(json.dumps({"error": message}, ensure_ascii=False))
-    return 0
-
-
 def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
-    language = app_language(params)
+    language = params.get("USAGEBOARD_LANGUAGE", "en")
+    language = "en" if language == "en" else "zh-Hans"
+    translate = make_translator({
+        "balance": {"zh-Hans": "余额", "en": "Balance"},
+    })
+
     api_key = params.get("API_KEY", "")
     if not api_key:
         return failure(translate(language, "missing_api_key"))
     limit_amount = parse_limit(params.get("LIMIT", ""))
 
     try:
-        items = fetch_balance(api_key, language, limit_amount)
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
-            return failure(translate(language, "http_401"))
-        if e.code == 403:
-            return failure(translate(language, "http_403"))
-        if e.code == 429:
-            return failure(translate(language, "http_429"))
-        if e.code >= 500:
-            return failure(translate(language, "http_5xx", code=e.code))
-        return failure(translate(language, "http_other", code=e.code))
+        items = fetch_balance(api_key, language, limit_amount, translate)
+    except urllib.error.HTTPError as error:
+        return handle_http_error(error, translate, language)
+    except urllib.error.URLError as error:
+        return handle_url_error(error, translate, language)
     except TimeoutError:
         return failure(translate(language, "request_timeout"))
     except Exception:

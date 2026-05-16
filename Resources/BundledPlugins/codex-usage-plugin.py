@@ -70,36 +70,23 @@ import urllib.request
 from datetime import datetime, time, timedelta, timezone
 from typing import Any
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from _common import (  # noqa: E402
+    app_language,
+    color_for_pct,
+    failure,
+    handle_http_error,
+    handle_url_error,
+    make_translator,
+    parse_usageboard_params,
+    success,
+    utc_now_iso,
+)
+
 
 ENDPOINT = "https://chatgpt.com/backend-api/wham/usage"
-SCHEMA_VERSION = 1
 CACHE_VERSION = 1
 CACHE_FILENAME = ".usageboard-chart-cache.json"
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    index = 0
-    while index < len(argv):
-        if argv[index] == "--usageboard-param" and index + 1 < len(argv):
-            key_value = argv[index + 1]
-            if "=" in key_value:
-                key, value = key_value.split("=", 1)
-                if key:
-                    values[key] = value
-            index += 2
-        else:
-            index += 1
-    return values
-
-
-def app_language(params: dict[str, str]) -> str:
-    return "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
-
 
 TRANSLATIONS = {
     "no_stats_data":        {"zh-Hans": "暂无可用统计数据",                              "en": "No stats data available"},
@@ -109,20 +96,9 @@ TRANSLATIONS = {
     "auth_token_missing":   {"zh-Hans": "认证信息不完整，请重新登录 Codex",               "en": "Incomplete auth. Sign in to Codex again."},
     "token_expired":        {"zh-Hans": "登录已过期，请重新运行 codex auth",              "en": "Session expired. Run codex auth again."},
     "unauthorized":         {"zh-Hans": "账号无权限访问",                                "en": "Access denied. Check your plan."},
-    "http_429":             {"zh-Hans": "请求频率超限，请稍后重试",                       "en": "Rate limited. Try again later."},
-    "http_5xx":             {"zh-Hans": "服务暂时不可用 (HTTP {code})",                 "en": "Service unavailable (HTTP {code})"},
-    "http_other":           {"zh-Hans": "请求失败 (HTTP {code})",                      "en": "Request failed (HTTP {code})"},
-    "request_timeout":      {"zh-Hans": "请求超时，请检查网络",                           "en": "Request timed out. Check your network."},
-    "network_error":        {"zh-Hans": "网络连接失败，请检查网络",                        "en": "Network error. Check your connection."},
     "stats_parse_failed":   {"zh-Hans": "统计数据解析失败",                               "en": "Failed to parse stats data"},
     "no_quota_data":        {"zh-Hans": "未获取到配额数据，账号可能不支持此 API",          "en": "No quota data. Account may not support this API."},
 }
-
-
-def translate(language: str, key: str, **kwargs) -> str:
-    values = TRANSLATIONS.get(key, {})
-    text = values.get(language) or values.get("zh-Hans") or key
-    return text.format(**kwargs) if kwargs else text
 
 
 def load_auth(auth_path: str) -> dict[str, Any] | None:
@@ -200,16 +176,6 @@ def get_reset_at(window: dict[str, Any]) -> str | None:
     if isinstance(nested, dict):
         return get_reset_at(nested)
     return None
-
-
-def color_for(used_pct: float) -> str:
-    if used_pct >= 90:
-        return "red"
-    if used_pct >= 80:
-        return "orange"
-    if used_pct >= 60:
-        return "yellow"
-    return "blue"
 
 
 def stat_range(period: str) -> tuple[datetime, datetime, list[datetime], str]:
@@ -516,7 +482,7 @@ def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, 
                 "displayStyle": "percent",
                 "resetAt": get_reset_at(five_hour),
                 "status": "critical" if used >= 90 else "warning" if used >= 75 else "normal",
-                "color": color_for(used),
+                "color": color_for_pct(used),
             })
 
     if weekly:
@@ -531,32 +497,18 @@ def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, 
                 "displayStyle": "percent",
                 "resetAt": get_reset_at(weekly),
                 "status": "critical" if used >= 90 else "warning" if used >= 75 else "normal",
-                "color": color_for(used),
+                "color": color_for_pct(used),
             })
 
     return items, badge
 
 
-def success(items: list[dict[str, Any]], badge: str | None = None, chart: dict[str, Any] | None = None) -> int:
-    result: dict[str, Any] = {"schemaVersion": SCHEMA_VERSION, "updatedAt": utc_now_iso(), "items": items}
-    if badge:
-        result["badge"] = badge
-    if chart:
-        result["chart"] = chart
-    print(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
-def failure(message: str, language: str) -> int:
-    print(json.dumps({"error": message}, ensure_ascii=False))
-    return 0
-
-
 def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
     language = app_language(params)
+    translate = make_translator(TRANSLATIONS)
     auth_file = params.get("AUTH_FILE", "") or "~/.codex/auth.json"
-    data_dir = params.get("DATA_DIR", "") or "~/.codex"
+    data_dir = os.path.realpath(os.path.expanduser(params.get("DATA_DIR", "") or "~/.codex"))
     enable_stats = params.get("ENABLE_STATS", "true").lower() != "false"
     period = params.get("STAT_PERIOD", "7d").lower()
     if period not in ("7d", "15d", "30d"):
@@ -564,11 +516,11 @@ def main() -> int:
 
     auth = load_auth(auth_file)
     if not auth:
-        return failure(translate(language, "auth_file_not_found", path=os.path.expanduser(auth_file)), language)
+        return failure(translate(language, "auth_file_not_found", path=os.path.expanduser(auth_file)))
 
     access_token, account_id = extract_auth_credentials(auth)
     if not access_token or not account_id:
-        return failure(translate(language, "auth_token_missing"), language)
+        return failure(translate(language, "auth_token_missing"))
 
     items: list[dict[str, Any]] = []
     badge: str | None = None
@@ -576,20 +528,16 @@ def main() -> int:
         items, badge = build_items(fetch_usage(access_token, account_id), language)
     except urllib.error.HTTPError as error:
         if error.code == 401:
-            return failure(translate(language, "token_expired"), language)
+            return failure(translate(language, "token_expired"))
         if error.code == 403:
-            return failure(translate(language, "unauthorized"), language)
-        if error.code == 429:
-            return failure(translate(language, "http_429"), language)
-        if error.code >= 500:
-            return failure(translate(language, "http_5xx", code=error.code), language)
-        return failure(translate(language, "http_other", code=error.code), language)
-    except urllib.error.URLError:
-        return failure(translate(language, "network_error"), language)
+            return failure(translate(language, "unauthorized"))
+        return handle_http_error(error, translate, language)
+    except urllib.error.URLError as error:
+        return handle_url_error(error, translate, language)
     except TimeoutError:
-        return failure(translate(language, "request_timeout"), language)
+        return failure(translate(language, "request_timeout"))
     except Exception:
-        return failure(translate(language, "network_error"), language)
+        return failure(translate(language, "network_error"))
 
     chart = None
     if enable_stats:
@@ -601,7 +549,7 @@ def main() -> int:
             chart = chart_message(translate(language, "stats_parse_failed"), period, buckets, bucket_unit)
 
     if not items:
-        return failure(translate(language, "no_quota_data"), language)
+        return failure(translate(language, "no_quota_data"))
     return success(items, badge=badge, chart=chart)
 
 

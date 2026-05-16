@@ -27,123 +27,30 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from _common import (  # noqa: E402
+    failure,
+    get_app_language,
+    handle_http_error,
+    handle_url_error,
+    make_translator,
+    numeric,
+    parse_usageboard_params,
+    status_for,
+    color_for,
+    success,
+    utc_now_iso,
+)
+
 
 ENDPOINT = "https://www.minimaxi.com/v1/token_plan/remains"
-SCHEMA_VERSION = 1
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(microsecond=0)
-
-
-def utc_now_iso() -> str:
-    return utc_now().isoformat().replace("+00:00", "Z")
-
-
-def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    index = 0
-    while index < len(argv):
-        if argv[index] == "--usageboard-param" and index + 1 < len(argv):
-            key_value = argv[index + 1]
-            if "=" in key_value:
-                key, value = key_value.split("=", 1)
-                if key:
-                    values[key] = value
-            index += 2
-        else:
-            index += 1
-    return values
-
-
-def get_api_key(argv: list[str]) -> str | None:
-    return parse_usageboard_params(argv).get("API_KEY")
-
-
-def get_app_language(argv: list[str]) -> str:
-    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
-
-
-TRANSLATIONS = {
-    "model_text_generation": {
-        "zh-Hans": "文本",
-        "en": "Text",
-    },
-    "model_vision": {
-        "zh-Hans": "视觉",
-        "en": "Vision",
-    },
-    "model_search": {
-        "zh-Hans": "搜索",
-        "en": "Search",
-    },
-    "model_image": {
-        "zh-Hans": "图像",
-        "en": "Image",
-    },
-    "model_speech": {
-        "zh-Hans": "语音",
-        "en": "Speech",
-    },
-    "model_fast_video": {
-        "zh-Hans": "快速视频",
-        "en": "Fast video",
-    },
-    "model_video": {
-        "zh-Hans": "视频",
-        "en": "Video",
-    },
-    "model_cover_song": {
-        "zh-Hans": "翻唱",
-        "en": "Cover song",
-    },
-    "model_lyrics": {
-        "zh-Hans": "歌词",
-        "en": "Lyrics",
-    },
-    "model_music": {
-        "zh-Hans": "音乐",
-        "en": "Music",
-    },
-    "period_5h": {
-        "zh-Hans": "5小时",
-        "en": "5 hours",
-    },
-    "period_day": {
-        "zh-Hans": "天",
-        "en": "day",
-    },
-    "period_week": {
-        "zh-Hans": "周",
-        "en": "week",
-    },
-    "period_generic": {
-        "zh-Hans": "周期",
-        "en": "period",
-    },
-    "missing_api_key":  {"zh-Hans": "请在插件设置中配置 API Key",          "en": "Configure API Key in plugin settings"},
-    "no_quota_items":   {"zh-Hans": "未获取到配额数据",                     "en": "No quota data found."},
-    "request_timeout":  {"zh-Hans": "请求超时，请检查网络",                  "en": "Request timed out. Check your network."},
-    "http_401":         {"zh-Hans": "API Key 无效，请检查配置",             "en": "Invalid API Key. Check your settings."},
-    "invalid_api_key":  {"zh-Hans": "API Key 无效，请检查配置",             "en": "Invalid API Key. Check your settings."},
-    "http_403":         {"zh-Hans": "账号无权限访问",                        "en": "Access denied. Check your plan."},
-    "http_429":         {"zh-Hans": "请求频率超限，请稍后重试",               "en": "Rate limited. Try again later."},
-    "http_5xx":         {"zh-Hans": "服务暂时不可用 (HTTP {code})",         "en": "Service unavailable (HTTP {code})"},
-    "http_other":       {"zh-Hans": "请求失败 (HTTP {code})",              "en": "Request failed (HTTP {code})"},
-    "network_error":    {"zh-Hans": "网络连接失败，请检查网络",               "en": "Network error. Check your connection."},
-}
-
-
-def translate(language: str, key: str, **kwargs) -> str:
-    values = TRANSLATIONS.get(key, {})
-    text = values.get(language) or values.get("zh-Hans") or key
-    return text.format(**kwargs) if kwargs else text
 
 
 def fetch_remains(api_key: str) -> dict[str, Any]:
@@ -158,43 +65,12 @@ def fetch_remains(api_key: str) -> dict[str, Any]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def numeric(value: Any) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return 0
-    return 0
-
-
 def reset_at_from_remaining_ms(value: Any) -> str | None:
     remaining_ms = numeric(value)
     if remaining_ms <= 0:
         return None
-    reset_at = utc_now() + timedelta(milliseconds=remaining_ms)
+    reset_at = datetime.now(timezone.utc) + timedelta(milliseconds=remaining_ms)
     return reset_at.isoformat().replace("+00:00", "Z")
-
-
-def status_for(used: float, total: float) -> str:
-    pct = used / total * 100 if total > 0 else 0
-    if pct >= 90:
-        return "critical"
-    if pct >= 75:
-        return "warning"
-    return "normal"
-
-
-def color_for(used: float, total: float) -> str:
-    pct = used / total * 100 if total > 0 else 0
-    if pct >= 90:
-        return "red"
-    if pct >= 80:
-        return "orange"
-    if pct >= 60:
-        return "yellow"
-    return "blue"
 
 
 def item(item_id: str, name: str, used: float, total: float, reset_at: str | None) -> dict[str, Any]:
@@ -222,7 +98,6 @@ MODEL_SORT_ORDER = {
     "model_cover_song": 8,
     "model_lyrics": 9,
 }
-
 
 PERIOD_ORDER = {
     "period_5h": 0,
@@ -294,7 +169,7 @@ def interval_label_key(model: dict[str, Any]) -> str:
     return "period_generic"
 
 
-def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, Any]], str | None]:
+def build_items(payload: dict[str, Any], language: str, translate: Any) -> tuple[list[dict[str, Any]], str | None]:
     models = payload.get("model_remains", [])
     if not isinstance(models, list):
         return [], None
@@ -316,7 +191,8 @@ def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, 
         weekly_used = numeric(model.get("current_weekly_usage_count"))
 
         if raw_name == "image-01" and badge is None and interval_total > 0:
-            badge = IMAGE_PLAN_BADGES.get(int(interval_total))
+            if interval_total == int(interval_total):
+                badge = IMAGE_PLAN_BADGES.get(int(interval_total))
 
         if interval_total > 0:
             period_key = interval_label_key(model)
@@ -354,53 +230,52 @@ def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, 
     return output, badge
 
 
-def success(items: list[dict[str, Any]], badge: str | None = None) -> int:
-    result: dict[str, Any] = {"schemaVersion": SCHEMA_VERSION, "updatedAt": utc_now_iso(), "items": items}
-    if badge:
-        result["badge"] = badge
-    print(json.dumps(result, ensure_ascii=False))
-    return 0
-
-
-def failure(message: str, language: str) -> int:
-    print(json.dumps({"error": message}, ensure_ascii=False))
-    return 0
-
-
 def main() -> int:
-    api_key = get_api_key(sys.argv[1:])
+    params = parse_usageboard_params(sys.argv[1:])
     language = get_app_language(sys.argv[1:])
+    translate = make_translator({
+        "model_text_generation": {"zh-Hans": "文本",       "en": "Text"},
+        "model_vision":         {"zh-Hans": "视觉",       "en": "Vision"},
+        "model_search":         {"zh-Hans": "搜索",       "en": "Search"},
+        "model_image":          {"zh-Hans": "图像",       "en": "Image"},
+        "model_speech":         {"zh-Hans": "语音",       "en": "Speech"},
+        "model_fast_video":     {"zh-Hans": "快速视频",    "en": "Fast video"},
+        "model_video":          {"zh-Hans": "视频",       "en": "Video"},
+        "model_cover_song":     {"zh-Hans": "翻唱",       "en": "Cover song"},
+        "model_lyrics":         {"zh-Hans": "歌词",       "en": "Lyrics"},
+        "model_music":          {"zh-Hans": "音乐",       "en": "Music"},
+        "period_5h":            {"zh-Hans": "5小时",      "en": "5 hours"},
+        "period_day":           {"zh-Hans": "天",         "en": "day"},
+        "period_week":          {"zh-Hans": "周",         "en": "week"},
+        "period_generic":       {"zh-Hans": "周期",       "en": "period"},
+        "no_quota_items":       {"zh-Hans": "未获取到配额数据", "en": "No quota data found."},
+        "invalid_api_key":      {"zh-Hans": "API Key 无效，请检查配置", "en": "Invalid API Key. Check your settings."},
+    })
+
+    api_key = params.get("API_KEY")
     if not api_key:
-        return failure(translate(language, "missing_api_key"), language)
+        return failure(translate(language, "missing_api_key"))
 
     try:
         payload = fetch_remains(api_key)
         status_code = payload.get("base_resp", {}).get("status_code", 0)
         if status_code != 0:
             if status_code == 2049:
-                return failure(translate(language, "invalid_api_key"), language)
+                return failure(translate(language, "invalid_api_key"))
             status_msg = payload.get("base_resp", {}).get("status_msg", "")
-            return failure(f"{status_msg} ({status_code})" if status_msg else str(status_code), language)
-        items, badge = build_items(payload, language)
+            return failure(f"{status_msg} ({status_code})" if status_msg else str(status_code))
+        items, badge = build_items(payload, language, translate)
         if not items:
-            return failure(translate(language, "no_quota_items"), language)
+            return failure(translate(language, "no_quota_items"))
         return success(items, badge=badge)
     except urllib.error.HTTPError as error:
-        if error.code == 401:
-            return failure(translate(language, "http_401"), language)
-        if error.code == 403:
-            return failure(translate(language, "http_403"), language)
-        if error.code == 429:
-            return failure(translate(language, "http_429"), language)
-        if error.code >= 500:
-            return failure(translate(language, "http_5xx", code=error.code), language)
-        return failure(translate(language, "http_other", code=error.code), language)
-    except urllib.error.URLError:
-        return failure(translate(language, "network_error"), language)
+        return handle_http_error(error, translate, language)
+    except urllib.error.URLError as error:
+        return handle_url_error(error, translate, language)
     except TimeoutError:
-        return failure(translate(language, "request_timeout"), language)
+        return failure(translate(language, "request_timeout"))
     except Exception:
-        return failure(translate(language, "network_error"), language)
+        return failure(translate(language, "network_error"))
 
 
 if __name__ == "__main__":

@@ -43,7 +43,7 @@ def plugin_environment(interpreter: Path) -> dict[str, str]:
 
 class TestBundledPluginInterpreterCompatibility(unittest.TestCase):
     def test_missing_configuration_outputs_json_error(self):
-        plugins = sorted(PLUGIN_DIR.glob("*.py"))
+        plugins = sorted(p for p in PLUGIN_DIR.glob("*.py") if not p.name.startswith("_"))
         self.assertTrue(plugins, "Expected bundled plugin scripts")
 
         interpreters = list(available_interpreters())

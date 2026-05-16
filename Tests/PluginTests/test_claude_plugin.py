@@ -15,6 +15,9 @@ PLUGIN_PATH = Path(__file__).parent.parent.parent / "Resources" / "BundledPlugin
 
 
 def load_plugin():
+    plugin_dir = str(PLUGIN_PATH.parent)
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
     spec = importlib.util.spec_from_file_location("claude_plugin", PLUGIN_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -28,15 +31,18 @@ class TestTranslateSignature(unittest.TestCase):
     """translate(language, key) — language first, key second (matches all other plugins)."""
 
     def test_language_first_zh(self):
-        result = plugin.translate("zh-Hans", "five_hour")
+        translate = plugin._translate("zh-Hans")
+        result = translate("zh-Hans", "five_hour")
         self.assertEqual(result, "5 小时用量")
 
     def test_language_first_en(self):
-        result = plugin.translate("en", "five_hour")
+        translate = plugin._translate("en")
+        result = translate("en", "five_hour")
         self.assertEqual(result, "5-hour usage")
 
     def test_unknown_key_returns_key(self):
-        result = plugin.translate("en", "nonexistent_key")
+        translate = plugin._translate("en")
+        result = translate("en", "nonexistent_key")
         self.assertEqual(result, "nonexistent_key")
 
 
@@ -44,19 +50,19 @@ class TestColorThresholds(unittest.TestCase):
     """color_for thresholds should match other plugins: ≥90 red, ≥80 orange, ≥60 yellow, <60 blue."""
 
     def test_90_is_red(self):
-        self.assertEqual(plugin.color_for(90), "red")
+        self.assertEqual(plugin.color_for_pct(90), "red")
 
     def test_80_is_orange(self):
-        self.assertEqual(plugin.color_for(80), "orange")
+        self.assertEqual(plugin.color_for_pct(80), "orange")
 
     def test_79_is_yellow(self):
-        self.assertEqual(plugin.color_for(79), "yellow")
+        self.assertEqual(plugin.color_for_pct(79), "yellow")
 
     def test_60_is_yellow(self):
-        self.assertEqual(plugin.color_for(60), "yellow")
+        self.assertEqual(plugin.color_for_pct(60), "yellow")
 
     def test_59_is_blue(self):
-        self.assertEqual(plugin.color_for(59), "blue")
+        self.assertEqual(plugin.color_for_pct(59), "blue")
 
 
 class TestStatusThresholds(unittest.TestCase):
@@ -114,7 +120,8 @@ class TestBuildItemsFromOauth(unittest.TestCase):
             "seven_day_omelette": {"utilization": 91.2, "resets_at": "2026-05-11T00:00:00Z"},
         }
 
-        items = plugin.build_items_from_oauth(payload, "zh-Hans", {}, {})
+        translate = plugin._translate("zh-Hans")
+        items = plugin.build_items_from_oauth(payload, "zh-Hans", {}, {}, translate)
         design_item = next(item for item in items if item["id"] == "claude-design-seven-day")
 
         self.assertEqual(len(items), 3)
@@ -132,7 +139,8 @@ class TestBuildItemsFromOauth(unittest.TestCase):
             "seven_day": {"utilization": 56.78, "resets_at": "2026-05-10T00:00:00Z"},
         }
 
-        items = plugin.build_items_from_oauth(payload, "en", {}, {})
+        translate = plugin._translate("en")
+        items = plugin.build_items_from_oauth(payload, "en", {}, {}, translate)
 
         self.assertEqual([item["id"] for item in items], ["claude-five-hour", "claude-seven-day"])
 
