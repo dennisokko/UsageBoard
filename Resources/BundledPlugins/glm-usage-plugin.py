@@ -295,16 +295,6 @@ def item(
     }
 
 
-def color_for_percentage(pct: float) -> str:
-    if pct >= 90:
-        return "red"
-    if pct >= 80:
-        return "orange"
-    if pct >= 60:
-        return "yellow"
-    return "blue"
-
-
 def build_items(payload: dict[str, Any], language: str) -> tuple[list[dict[str, Any]], str | None]:
     data = payload.get("data", {})
     limits = data.get("limits", [])

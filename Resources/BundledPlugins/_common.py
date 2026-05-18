@@ -30,10 +30,6 @@ def parse_usageboard_params(argv: list[str]) -> dict[str, str]:
     return values
 
 
-def get_app_language(argv: list[str]) -> str:
-    return "en" if parse_usageboard_params(argv).get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
-
-
 def app_language(params: dict[str, str]) -> str:
     return "en" if params.get("USAGEBOARD_LANGUAGE") == "en" else "zh-Hans"
 

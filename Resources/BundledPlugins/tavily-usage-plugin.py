@@ -39,7 +39,6 @@ from _common import (  # noqa: E402
     app_language,
     color_for,
     failure,
-    get_app_language,
     handle_http_error,
     handle_url_error,
     make_translator,
@@ -119,7 +118,7 @@ def build_items(payload: dict[str, Any], language: str, translate: Any) -> list[
 
 def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
-    language = get_app_language(sys.argv[1:])
+    language = app_language(params)
     translate = make_translator({
         "total_usage":  {"zh-Hans": "总用量", "en": "Total usage"},
         "search":       {"zh-Hans": "搜索",   "en": "Search"},

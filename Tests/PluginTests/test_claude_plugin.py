@@ -121,7 +121,7 @@ class TestBuildItemsFromOauth(unittest.TestCase):
         }
 
         translate = plugin._translate("zh-Hans")
-        items = plugin.build_items_from_oauth(payload, "zh-Hans", {}, {}, translate)
+        items = plugin.build_items_from_oauth(payload, "zh-Hans", translate)
         design_item = next(item for item in items if item["id"] == "claude-design-seven-day")
 
         self.assertEqual(len(items), 3)
@@ -140,7 +140,7 @@ class TestBuildItemsFromOauth(unittest.TestCase):
         }
 
         translate = plugin._translate("en")
-        items = plugin.build_items_from_oauth(payload, "en", {}, {}, translate)
+        items = plugin.build_items_from_oauth(payload, "en", translate)
 
         self.assertEqual([item["id"] for item in items], ["claude-five-hour", "claude-seven-day"])
 
@@ -181,7 +181,7 @@ class TestMaintainCacheRefreshesToday(unittest.TestCase):
             # First run: today has 100 tokens
             self._write_jsonl(jsonl, earlier.isoformat(), "claude-sonnet", 100)
             result1 = plugin.maintain_cache(tmp)
-            self.assertEqual(result1.get(today_str, {}).get("claude-sonnet", 0), 100)
+            self.assertEqual(result1.get(today_str, {}).get("claude-sonnet", {}).get("output", 0), 100)
 
             # Append more usage in the same day — simulate user activity since first run
             self._write_jsonl(jsonl, later.isoformat(), "claude-sonnet", 250)
@@ -189,10 +189,58 @@ class TestMaintainCacheRefreshesToday(unittest.TestCase):
             # Second run (same day, gap_days == 0) — must pick up the 250 new tokens
             result2 = plugin.maintain_cache(tmp)
             self.assertEqual(
-                result2.get(today_str, {}).get("claude-sonnet", 0),
+                result2.get(today_str, {}).get("claude-sonnet", {}).get("output", 0),
                 350,
                 "Today's data must be re-scanned on subsequent runs, not returned from cache as-is",
             )
+
+
+class TestComputeTokens(unittest.TestCase):
+    """compute_tokens supports both billing-weighted and actual modes."""
+
+    def test_actual_sums_all_four(self):
+        b = {"input": 100, "output": 50, "cache_creation": 200, "cache_read": 9999}
+        self.assertEqual(plugin.compute_tokens(b, "actual"), 100 + 50 + 200 + 9999)
+
+    def test_billable_applies_ratios(self):
+        b = {"input": 100, "output": 50, "cache_creation": 200, "cache_read": 9999}
+        # 100*1 + 50*5 + 200*1.25 + 9999*0.1 = 100 + 250 + 250 + 999.9 = 1599.9 → 1600
+        self.assertEqual(plugin.compute_tokens(b, "billable"), 1600)
+
+    def test_unknown_mode_defaults_to_billable(self):
+        b = {"input": 100, "output": 50, "cache_creation": 200, "cache_read": 9999}
+        self.assertEqual(plugin.compute_tokens(b, "unknown"), 1600)
+
+
+class TestParseRecordsReturnsBreakdown(unittest.TestCase):
+    """parse_records returns raw 4-field breakdown, not pre-summed total."""
+
+    def test_breakdown_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl = os.path.join(tmp, "session.jsonl")
+            with open(jsonl, "w") as f:
+                f.write(json.dumps({
+                    "type": "assistant",
+                    "timestamp": "2026-05-15T10:00:00Z",
+                    "message": {
+                        "id": "msg-1",
+                        "model": "claude-opus-4-7",
+                        "usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 50,
+                            "cache_creation_input_tokens": 200,
+                            "cache_read_input_tokens": 9999,
+                        },
+                    },
+                }) + "\n")
+            start = datetime(2026, 5, 14, tzinfo=timezone.utc)
+            end = datetime(2026, 5, 16, tzinfo=timezone.utc)
+            records = plugin.parse_records([jsonl], start, end)
+            self.assertEqual(len(records), 1)
+            _, _, breakdown = records[0]
+            self.assertEqual(breakdown, {
+                "input": 100, "output": 50, "cache_creation": 200, "cache_read": 9999,
+            })
 
 
 if __name__ == "__main__":

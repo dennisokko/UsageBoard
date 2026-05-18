@@ -47,6 +47,19 @@
 #       "defaultValue": "false"
 #     },
 #     {
+#       "name": "CALC_MODE",
+#       "label": "Calculation Mode",
+#       "label@zh-Hans": "计算方式",
+#       "label@en": "Calculation Mode",
+#       "type": "choice",
+#       "required": false,
+#       "defaultValue": "billable",
+#       "options": [
+#         {"label": "Billing-weighted", "label@zh-Hans": "计费倍率", "label@en": "Billing-weighted", "value": "billable"},
+#         {"label": "Actual usage",     "label@zh-Hans": "实际消耗", "label@en": "Actual usage",     "value": "actual"}
+#       ]
+#     },
+#     {
 #       "name": "DATA_DIR",
 #       "label": "Data Directory",
 #       "label@zh-Hans": "数据目录",
@@ -81,8 +94,7 @@ from _common import (  # noqa: E402
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-PLAN_5H = {"pro": 44_000, "max5": 88_000, "max20": 220_000}
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 CACHE_FILENAME = ".usageboard-chart-cache.json"
 PARSE_ERROR = "parse_error"
 
@@ -90,9 +102,6 @@ def status_for(pct):
     if pct >= 90: return "critical"
     if pct >= 75: return "warning"
     return "normal"
-
-def to_k(tokens):
-    return round(tokens / 1000, 1)
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -103,7 +112,15 @@ def local_today():
 def is_claude_model(model_name):
     return model_name.startswith("claude-")
 
-SCHEMA_VERSION = 1
+def compute_tokens(breakdown, mode):
+    i  = breakdown.get("input", 0)
+    o  = breakdown.get("output", 0)
+    cc = breakdown.get("cache_creation", 0)
+    cr = breakdown.get("cache_read", 0)
+    if mode == "actual":
+        return i + o + cc + cr
+    return int(round(i * 1.0 + o * 5.0 + cc * 1.25 + cr * 0.1))
+
 
 def _translate(lang):
     return make_translator({
@@ -160,7 +177,7 @@ def fetch_oauth_usage(token):
     except Exception:
         return None, None
 
-def build_items_from_oauth(data, lang, params, daily, translate):
+def build_items_from_oauth(data, lang, translate):
     fh = data.get("five_hour", {})
     sd = data.get("seven_day", {})
     design_week = data.get("seven_day_omelette", {})
@@ -168,21 +185,6 @@ def build_items_from_oauth(data, lang, params, daily, translate):
     sd_pct = float(sd.get("utilization", 0))
     fh_resets = fh.get("resets_at")
     sd_resets = sd.get("resets_at")
-
-    stat_period = params.get("STAT_PERIOD", "7d")
-    claude_only = params.get("CLAUDE_ONLY", "false").lower() == "true"
-    plan = params.get("PLAN", "pro")
-    limit_5h = PLAN_5H.get(plan, 44_000)
-
-    stat_days = {"7d": 7, "15d": 15, "30d": 30}.get(stat_period, 7)
-    date_list = [
-        (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-        for i in range(stat_days - 1, -1, -1)
-    ]
-    tokens_stat = sum_tokens(daily, date_list, claude_only)
-    multiplier = {"7d": 33.6, "15d": 72.0, "30d": 144.0}.get(stat_period, 33.6)
-    limit_stat_k = to_k(limit_5h * multiplier)
-    stat_pct = (to_k(tokens_stat) / limit_stat_k * 100) if limit_stat_k > 0 else 0
 
     items = [
         {
@@ -256,13 +258,13 @@ def parse_records(files, start_dt, end_dt):
                         continue
                     seen_ids.add(msg_id)
                     usage = msg.get("usage", {})
-                    total = (
-                        usage.get("input_tokens", 0)
-                        + usage.get("output_tokens", 0)
-                        + usage.get("cache_creation_input_tokens", 0)
-                        + usage.get("cache_read_input_tokens", 0)
-                    )
-                    if total <= 0:
+                    breakdown = {
+                        "input":          usage.get("input_tokens", 0),
+                        "output":         usage.get("output_tokens", 0),
+                        "cache_creation": usage.get("cache_creation_input_tokens", 0),
+                        "cache_read":     usage.get("cache_read_input_tokens", 0),
+                    }
+                    if breakdown["input"] + breakdown["output"] + breakdown["cache_creation"] + breakdown["cache_read"] <= 0:
                         continue
                     raw_ts = obj.get("timestamp", "")
                     if not raw_ts:
@@ -272,17 +274,20 @@ def parse_records(files, start_dt, end_dt):
                     except Exception:
                         continue
                     if start_dt <= ts <= end_dt:
-                        records.append((ts, msg.get("model", "unknown"), total))
+                        records.append((ts, msg.get("model", "unknown"), breakdown))
         except Exception:
             continue
     return records
 
 def group_by_local_date(records):
     result = {}
-    for ts, model, tokens in records:
+    for ts, model, b in records:
         day = ts.astimezone().strftime("%Y-%m-%d")
-        result.setdefault(day, {})
-        result[day][model] = result[day].get(model, 0) + tokens
+        bucket = result.setdefault(day, {}).setdefault(model, {
+            "input": 0, "output": 0, "cache_creation": 0, "cache_read": 0,
+        })
+        for k in ("input", "output", "cache_creation", "cache_read"):
+            bucket[k] += b.get(k, 0)
     return result
 
 # ─── Stats cache ──────────────────────────────────────────────────────────────
@@ -374,20 +379,9 @@ def maintain_cache(data_dir):
     })
     return merged
 
-# ─── Token summing ────────────────────────────────────────────────────────────
-
-def sum_tokens(daily, date_list, claude_only):
-    total = 0
-    for date in date_list:
-        for model, tokens in daily.get(date, {}).items():
-            if claude_only and not is_claude_model(model):
-                continue
-            total += tokens
-    return total
-
 # ─── Chart ────────────────────────────────────────────────────────────────────
 
-def build_chart(params, daily, lang, translate):
+def build_chart(params, daily, lang, translate, mode):
     stat_period = params.get("STAT_PERIOD", "7d")
     claude_only = params.get("CLAUDE_ONLY", "false").lower() == "true"
     stat_days = {"7d": 7, "15d": 15, "30d": 30}.get(stat_period, 7)
@@ -401,9 +395,10 @@ def build_chart(params, daily, lang, translate):
     for date in date_list:
         day_data = daily.get(date, {})
         segments = []
-        for model, tokens in sorted(day_data.items()):
+        for model, breakdown in sorted(day_data.items()):
             if claude_only and not is_claude_model(model):
                 continue
+            tokens = compute_tokens(breakdown, mode)
             if tokens > 0:
                 segments.append({"model": model, "tokens": tokens})
         buckets.append({"id": date, "label": date[5:], "segments": segments})
@@ -443,14 +438,15 @@ def main():
             failure(translate(lang, "api_error"))
         return
 
+    mode = params.get("CALC_MODE", "billable")
     daily = maintain_cache(data_dir)
     try:
-        items = build_items_from_oauth(oauth_data, lang, params, daily, translate)
+        items = build_items_from_oauth(oauth_data, lang, translate)
         badge = str(oauth_data.get("plan_type", params.get("PLAN", "pro"))).capitalize()
     except Exception:
         failure(translate(lang, "usage_parse_failed"))
         return
-    chart = build_chart(params, daily, lang, translate)
+    chart = build_chart(params, daily, lang, translate, mode)
 
     success(items, chart=chart, badge=badge)
 

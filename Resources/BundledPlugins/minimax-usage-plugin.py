@@ -36,8 +36,8 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 from _common import (  # noqa: E402
+    app_language,
     failure,
-    get_app_language,
     handle_http_error,
     handle_url_error,
     make_translator,
@@ -232,7 +232,7 @@ def build_items(payload: dict[str, Any], language: str, translate: Any) -> tuple
 
 def main() -> int:
     params = parse_usageboard_params(sys.argv[1:])
-    language = get_app_language(sys.argv[1:])
+    language = app_language(params)
     translate = make_translator({
         "model_text_generation": {"zh-Hans": "文本",       "en": "Text"},
         "model_vision":         {"zh-Hans": "视觉",       "en": "Vision"},
