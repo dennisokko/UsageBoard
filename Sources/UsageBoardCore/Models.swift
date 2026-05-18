@@ -533,7 +533,6 @@ public enum PluginSnapshotState: Equatable, Sendable {
 
 public struct PluginSnapshot: Equatable, Identifiable, Sendable {
     public var id: UUID
-    public var pluginName: String
     public var displayName: String
     public var state: PluginSnapshotState
     public var items: [UsageItem]
@@ -544,7 +543,6 @@ public struct PluginSnapshot: Equatable, Identifiable, Sendable {
 
     public init(
         id: UUID,
-        pluginName: String,
         displayName: String,
         state: PluginSnapshotState = .idle,
         items: [UsageItem] = [],
@@ -554,7 +552,6 @@ public struct PluginSnapshot: Equatable, Identifiable, Sendable {
         chart: PluginChart? = nil
     ) {
         self.id = id
-        self.pluginName = pluginName
         self.displayName = displayName
         self.state = state
         self.items = items

@@ -29,11 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         statusItem = item
     }
 
-    @objc func showPopover() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { self.showPopover() }
-            return
-        }
+    private func showPopover() {
         guard let button = statusItem?.button else { return }
         if let popover, popover.isShown {
             popover.performClose(nil)
@@ -156,8 +152,6 @@ struct UsageBoardApplication: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Settings {
-            SettingsView(store: appDelegate.store)
-        }
+        Settings { EmptyView() }
     }
 }

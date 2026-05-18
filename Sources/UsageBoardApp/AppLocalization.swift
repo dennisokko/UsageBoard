@@ -86,8 +86,6 @@ struct AppLocalization {
         case (.checkingUpdate, .zhHans): return "检查中..."
         case (.checkForUpdates, .en): return "Check for Updates"
         case (.checkForUpdates, .zhHans): return "检查更新"
-        case (.aboutDescriptionLabel, .en): return "Description"
-        case (.aboutDescriptionLabel, .zhHans): return "说明"
         case (.aboutDescription, .en): return "Aggregates usage quotas for APIs and services"
         case (.aboutDescription, .zhHans): return "聚合展示各类 API 和服务的用量配额"
         case (.enabled, .en): return "Enabled"
@@ -174,7 +172,6 @@ struct AppLocalization {
         case unknownVersion
         case checkingUpdate
         case checkForUpdates
-        case aboutDescriptionLabel
         case aboutDescription
         case enabled
         case name

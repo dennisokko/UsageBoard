@@ -26,7 +26,7 @@ public struct PluginExecutor: Sendable {
 
     public func run(configuration: PluginConfiguration, displayName: String, language: AppLanguage) -> PluginSnapshot {
         guard configuration.enabled else {
-            return PluginSnapshot(id: configuration.id, pluginName: configuration.name, displayName: displayName, iconURL: configuration.metadata?.icon)
+            return PluginSnapshot(id: configuration.id, displayName: displayName, iconURL: configuration.metadata?.icon)
         }
 
         guard !configuration.executablePath.isEmpty else {
@@ -111,7 +111,6 @@ public struct PluginExecutor: Sendable {
             let pluginOutput = try UsageBoardJSON.decoder().decode(PluginOutput.self, from: outputData)
             return PluginSnapshot(
                 id: configuration.id,
-                pluginName: configuration.name,
                 displayName: displayName,
                 state: .ready,
                 items: pluginOutput.items,
@@ -152,7 +151,6 @@ public struct PluginExecutor: Sendable {
     private func failed(configuration: PluginConfiguration, displayName: String, message: String) -> PluginSnapshot {
         PluginSnapshot(
             id: configuration.id,
-            pluginName: configuration.name,
             displayName: displayName,
             state: .failed(message),
             items: [],

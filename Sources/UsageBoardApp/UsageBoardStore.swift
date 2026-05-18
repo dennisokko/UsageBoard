@@ -552,7 +552,6 @@ final class UsageBoardStore: ObservableObject {
     ) -> PluginSnapshot {
         PluginSnapshot(
             id: plugin.id,
-            pluginName: plugin.name,
             displayName: displayNames[plugin.id] ?? PluginDisplayNames.displayName(for: plugin, language: activeLanguage),
             state: state,
             items: items,

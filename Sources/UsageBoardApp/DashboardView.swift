@@ -852,48 +852,6 @@ private func formattedAxisTokenNumber(_ value: Double) -> String {
     return "\(Int(value.rounded()))"
 }
 
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-    var rowSpacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? 260
-        return layout(in: maxWidth, subviews: subviews).size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for item in layout(in: bounds.width, subviews: subviews).items {
-            subviews[item.index].place(
-                at: CGPoint(x: bounds.minX + item.frame.minX, y: bounds.minY + item.frame.minY),
-                proposal: ProposedViewSize(item.frame.size)
-            )
-        }
-    }
-
-    private func layout(in maxWidth: CGFloat, subviews: Subviews) -> (items: [(index: Int, frame: CGRect)], size: CGSize) {
-        var items: [(index: Int, frame: CGRect)] = []
-        var cursor = CGPoint.zero
-        var rowHeight: CGFloat = 0
-        var usedWidth: CGFloat = 0
-
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            if cursor.x > 0, cursor.x + size.width > maxWidth {
-                cursor.x = 0
-                cursor.y += rowHeight + rowSpacing
-                rowHeight = 0
-            }
-
-            items.append((index, CGRect(origin: cursor, size: size)))
-            cursor.x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-            usedWidth = max(usedWidth, cursor.x - spacing)
-        }
-
-        return (items, CGSize(width: min(maxWidth, usedWidth), height: cursor.y + rowHeight))
-    }
-}
-
 struct UsageProgressBar: View {
     var value: Double
     var label: String
