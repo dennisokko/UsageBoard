@@ -18,6 +18,7 @@
 #       "required": false,
 #       "defaultValue": "pro",
 #       "options": [
+#         {"label": "None",    "label@zh-Hans": "无",      "label@en": "None",    "value": "none"},
 #         {"label": "Pro",     "label@zh-Hans": "Pro",     "label@en": "Pro",     "value": "pro"},
 #         {"label": "Max 5X",  "label@zh-Hans": "Max 5X",  "label@en": "Max 5X",  "value": "max5"},
 #         {"label": "Max 20X", "label@zh-Hans": "Max 20X", "label@en": "Max 20X", "value": "max20"}
@@ -416,9 +417,18 @@ def main():
     lang = _app_language(params)
     translate = _translate(lang)
     data_dir = os.path.realpath(os.path.expanduser(params.get("DATA_DIR", "~/.claude")))
+    plan = params.get("PLAN", "pro").lower()
 
     if not os.path.isdir(os.path.expanduser(data_dir)):
         failure(translate(lang, "no_data_dir"))
+        return
+
+    mode = params.get("CALC_MODE", "billable")
+    daily = maintain_cache(data_dir)
+    chart = build_chart(params, daily, lang, translate, mode)
+
+    if plan == "none":
+        success([], chart=chart)
         return
 
     token = load_oauth_token()
@@ -438,15 +448,12 @@ def main():
             failure(translate(lang, "api_error"))
         return
 
-    mode = params.get("CALC_MODE", "billable")
-    daily = maintain_cache(data_dir)
     try:
         items = build_items_from_oauth(oauth_data, lang, translate)
         badge = str(oauth_data.get("plan_type", params.get("PLAN", "pro"))).capitalize()
     except Exception:
         failure(translate(lang, "usage_parse_failed"))
         return
-    chart = build_chart(params, daily, lang, translate, mode)
 
     success(items, chart=chart, badge=badge)
 

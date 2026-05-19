@@ -254,13 +254,13 @@ struct PluginGroupView: View {
                             .textSelection(.enabled)
                     }
                     .padding(.vertical, 8)
-                } else if snapshot.items.isEmpty {
+                } else if snapshot.items.isEmpty && snapshot.chart == nil {
                     Text(strings.text(.noUsageData))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 18)
-                } else {
+                } else if !snapshot.items.isEmpty {
                     VStack(spacing: 8) {
                         ForEach(snapshot.items) { item in
                             UsageItemRow(item: item, language: language)
@@ -273,30 +273,37 @@ struct PluginGroupView: View {
             .padding(.bottom, snapshot.chart == nil ? 10 : 0)
 
             if let chart = snapshot.chart {
-                VStack(spacing: 0) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            isChartExpanded.toggle()
+                if snapshot.items.isEmpty {
+                    TokenUsageChartView(chart: chart, language: language)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 2)
+                        .padding(.bottom, 8)
+                } else {
+                    VStack(spacing: 0) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                isChartExpanded.toggle()
+                            }
+                        } label: {
+                            VStack(spacing: 0) {
+                                Divider()
+                                    .padding(.top, 8)
+                                Image(systemName: isChartExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                                    .frame(maxWidth: .infinity, minHeight: 22)
+                            }
+                            .contentShape(Rectangle())
                         }
-                    } label: {
-                        VStack(spacing: 0) {
-                            Divider()
-                                .padding(.top, 8)
-                            Image(systemName: isChartExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity, minHeight: 22)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(isChartExpanded ? strings.text(.collapseTokenStats) : strings.text(.expandTokenStats))
+                        .buttonStyle(.plain)
+                        .help(isChartExpanded ? strings.text(.collapseTokenStats) : strings.text(.expandTokenStats))
 
-                    if isChartExpanded {
-                        TokenUsageChartView(chart: chart, language: language)
-                            .padding(.horizontal, 12)
-                            .padding(.top, 8)
-                            .padding(.bottom, 8)
+                        if isChartExpanded {
+                            TokenUsageChartView(chart: chart, language: language)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 8)
+                                .padding(.bottom, 8)
+                        }
                     }
                 }
             }
