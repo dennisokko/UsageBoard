@@ -39,9 +39,9 @@ def app_language(params: dict[str, str]) -> str:
 COMMON_TRANSLATIONS: dict[str, dict[str, str]] = {
     "missing_api_key":  {"zh-Hans": "请在插件设置中配置 API Key",          "en": "Configure API Key in plugin settings"},
     "request_timeout":  {"zh-Hans": "请求超时，请检查网络",                  "en": "Request timed out. Check your network."},
-    "http_401":         {"zh-Hans": "API Key 无效，请检查配置",             "en": "Invalid API Key. Check your settings."},
-    "http_403":         {"zh-Hans": "账号无权限访问",                        "en": "Access denied. Check your plan."},
-    "http_429":         {"zh-Hans": "请求频率超限，请稍后重试",               "en": "Rate limited. Try again later."},
+    "http_401":         {"zh-Hans": "API Key 无效，请检查配置 (HTTP {code})",         "en": "Invalid API Key. Check your settings. (HTTP {code})"},
+    "http_403":         {"zh-Hans": "账号无权限访问 (HTTP {code})",                    "en": "Access denied. Check your plan. (HTTP {code})"},
+    "http_429":         {"zh-Hans": "请求频率超限，请稍后重试 (HTTP {code})",           "en": "Rate limited. Try again later. (HTTP {code})"},
     "http_5xx":         {"zh-Hans": "服务暂时不可用 (HTTP {code})",         "en": "Service unavailable (HTTP {code})"},
     "http_other":       {"zh-Hans": "请求失败 (HTTP {code})",              "en": "Request failed (HTTP {code})"},
     "network_error":    {"zh-Hans": "网络连接失败，请检查网络",               "en": "Network error. Check your connection."},
@@ -133,11 +133,11 @@ def color_for_pct(pct: float) -> str:
 
 def handle_http_error(error: urllib.error.HTTPError, translate: Any, language: str) -> int:
     if error.code == 401:
-        return failure(translate(language, "http_401"))
+        return failure(translate(language, "http_401", code=error.code))
     if error.code == 403:
-        return failure(translate(language, "http_403"))
+        return failure(translate(language, "http_403", code=error.code))
     if error.code == 429:
-        return failure(translate(language, "http_429"))
+        return failure(translate(language, "http_429", code=error.code))
     if error.code >= 500:
         return failure(translate(language, "http_5xx", code=error.code))
     return failure(translate(language, "http_other", code=error.code))

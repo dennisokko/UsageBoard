@@ -127,11 +127,10 @@ def _translate(lang):
     return make_translator({
         "five_hour":     {"en": "5-hour usage",                                             "zh-Hans": "5 小时用量"},
         "weekly":        {"en": "Weekly usage",                                              "zh-Hans": "周用量"},
-        "design_weekly": {"en": "Design weekly usage",                                       "zh-Hans": "Design 周用量"},
         "no_data_dir":   {"en": "~/.claude not found. Install Claude Code CLI first.",       "zh-Hans": "~/.claude 目录不存在，请先安装 Claude Code CLI"},
         "login_hint":    {"en": "Not signed in. Run claude to sign in.",                     "zh-Hans": "未找到登录凭证，请运行 claude 登录"},
-        "api_error":     {"en": "API request failed. Check your network.",                   "zh-Hans": "API 请求失败，请检查网络"},
-        "api_401":       {"en": "Credentials expired. Sign in again.",                       "zh-Hans": "登录凭证已失效，请重新登录"},
+        "api_error":     {"en": "API request failed (HTTP {code})",                   "zh-Hans": "API 请求失败 (HTTP {code})"},
+        "api_401":       {"en": "Credentials expired. Sign in again. (HTTP {code})",   "zh-Hans": "登录凭证已失效，请重新登录 (HTTP {code})"},
         "api_5xx":       {"en": "Service unavailable (HTTP {code})",                        "zh-Hans": "服务暂时不可用 (HTTP {code})"},
         "no_stats_data": {"en": "No stats data available",                                   "zh-Hans": "暂无可用统计数据"},
     })
@@ -181,13 +180,12 @@ def fetch_oauth_usage(token):
 def build_items_from_oauth(data, lang, translate):
     fh = data.get("five_hour", {})
     sd = data.get("seven_day", {})
-    design_week = data.get("seven_day_omelette", {})
     fh_pct = float(fh.get("utilization", 0))
     sd_pct = float(sd.get("utilization", 0))
     fh_resets = fh.get("resets_at")
     sd_resets = sd.get("resets_at")
 
-    items = [
+    return [
         {
             "id": "claude-five-hour",
             "name": translate(lang, "five_hour"),
@@ -209,21 +207,6 @@ def build_items_from_oauth(data, lang, translate):
             "status": status_for(sd_pct),
         },
     ]
-
-    if isinstance(design_week, dict) and design_week:
-        design_pct = float(design_week.get("utilization", 0))
-        items.append({
-            "id": "claude-design-seven-day",
-            "name": translate(lang, "design_weekly"),
-            "displayStyle": "percent",
-            "used": round(min(design_pct, 100), 1),
-            "limit": 100,
-            "resetAt": design_week.get("resets_at"),
-            "color": color_for_pct(design_pct),
-            "status": status_for(design_pct),
-        })
-
-    return items
 
 # ─── JSONL scanning ───────────────────────────────────────────────────────────
 
@@ -439,13 +422,13 @@ def main():
     oauth_data, http_code = fetch_oauth_usage(token)
     if not oauth_data:
         if http_code == 401:
-            failure(translate(lang, "api_401"))
+            failure(translate(lang, "api_401", code=http_code))
         elif http_code == PARSE_ERROR:
             failure(translate(lang, "usage_parse_failed"))
         elif isinstance(http_code, int) and http_code >= 500:
             failure(translate(lang, "api_5xx", code=http_code))
         else:
-            failure(translate(lang, "api_error"))
+            failure(translate(lang, "api_error", code=http_code))
         return
 
     try:
