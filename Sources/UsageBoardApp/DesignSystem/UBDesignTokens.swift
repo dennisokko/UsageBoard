@@ -18,7 +18,7 @@ enum UB {
     }
 
     enum Canvas {
-        static let canvasBackground = Color(red: 0.961, green: 0.961, blue: 0.969)
+        static let canvasBackground = Color(nsColor: .windowBackgroundColor)
         static let cardBackground = Color(nsColor: .textBackgroundColor)
         static let separator = Color(nsColor: .separatorColor)
     }
