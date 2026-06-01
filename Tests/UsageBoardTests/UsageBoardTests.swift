@@ -47,6 +47,26 @@ final class UsageBoardTests: XCTestCase {
         XCTAssertFalse(store.needsRefresh(stateID: "plugin", intervalSeconds: -10))
     }
 
+    func testPluginStateStoreCacheHitsAfterDiskDelete() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
+        let store = PluginStateStore(directoryURL: directory)
+        let state = PluginCachedState(
+            updatedAt: Date(),
+            items: [UsageItem(id: "b", name: "B", used: 3, limit: 5, displayStyle: .percent)]
+        )
+
+        try store.save(stateID: "cached", state: state)
+
+        // Remove the file on disk — the in-memory cache should still serve it.
+        let fileURL = directory.appendingPathComponent("cached.json")
+        try FileManager.default.removeItem(at: fileURL)
+
+        let loaded = store.load(stateID: "cached")
+        XCTAssertNotNil(loaded, "Expected in-memory cache hit after disk file deletion")
+        XCTAssertEqual(loaded?.items.first?.name, "B")
+    }
+
     func testBundledPluginInstallerCreatesSymlinks() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("usageboard-\(UUID().uuidString)", isDirectory: true)
