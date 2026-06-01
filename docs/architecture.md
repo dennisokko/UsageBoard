@@ -53,11 +53,16 @@ UsageBoard/
 ├── Package.swift                          # SPM 定义，macOS 13+，Swift 6
 ├── Sources/
 │   ├── UsageBoardCore/                    # 核心逻辑，无 SwiftUI 依赖
-│   │   ├── Models.swift                   # 全部数据模型和枚举
+│   │   ├── CodableHelpers.swift           # AnyCodingKey 和多语言翻译编解码扩展
+│   │   ├── AppConfiguration.swift         # AppLanguage、DisplayMode、AppConfiguration
+│   │   ├── PluginConfiguration.swift      # 参数类型、参数元数据、插件元数据、插件配置
+│   │   ├── PluginOutput.swift             # UsageItem、PluginOutput、PluginChart 等
+│   │   ├── PluginSnapshot.swift           # PluginSnapshotState、PluginSnapshot、PluginCachedState
+│   │   ├── Protocols.swift                # ConfigStoring/PluginStateStoring/PluginExecuting/UpdateChecking 协议
 │   │   ├── ConfigStore.swift              # 配置文件读写和目录路径
 │   │   ├── PluginExecutor.swift           # 子进程执行插件
 │   │   ├── PluginMetadataParser.swift     # 解析插件元数据注释块
-│   │   ├── PluginStateStore.swift         # 插件数据磁盘缓存
+│   │   ├── PluginStateStore.swift         # 插件数据缓存（内存 + 磁盘两级）
 │   │   ├── PluginDisplayNames.swift       # 插件显示名去重
 │   │   ├── BundledPluginInstaller.swift   # 内置插件符号链接安装
 │   │   ├── UpdateChecker.swift            # 更新检查、下载、解压
@@ -66,9 +71,22 @@ UsageBoard/
 │   └── UsageBoardApp/                     # SwiftUI + AppKit macOS app
 │       ├── UsageBoardApp.swift            # App 入口、AppDelegate、StatusItem、窗口管理
 │       ├── UsageBoardStore.swift          # @MainActor ObservableObject 主状态
-│       ├── DashboardView.swift            # 主面板：OverviewView、DashboardView、PluginGroupView 等
-│       ├── SettingsView.swift             # 设置窗口：通用、插件、关于
-│       ├── AppLocalization.swift          # UI 文案国际化
+│       ├── AppLocalization.swift          # UI 文案国际化（@MainActor static shared 单例）
+│       ├── Dashboard/                     # 主面板视图
+│       │   ├── DashboardView.swift        # DashboardView、EmptyPluginsView
+│       │   ├── OverviewView.swift         # OverviewView、SettingsButton、QuitButton
+│       │   ├── PluginGroupView.swift      # 插件卡片
+│       │   ├── UsageItemRow.swift         # 用量行、进度条
+│       │   ├── TokenChartView.swift       # token 统计图容器和摘要
+│       │   ├── TokenLineChartPlot.swift   # 折线图绘制和格式化
+│       │   └── MeasuredScrollView.swift   # 自适应高度滚动容器
+│       ├── Settings/                      # 设置窗口视图
+│       │   ├── SettingsView.swift         # SettingsTab、SettingsView 骨架
+│       │   ├── GeneralSettingsView.swift  # 通用设置
+│       │   ├── PluginSettingsView.swift   # 插件列表和拖拽排序
+│       │   ├── PluginSettingsCard.swift   # 插件详情卡片和参数表单
+│       │   ├── AboutView.swift            # 关于和更新
+│       │   └── SettingsComponents.swift   # SettingsSection、SettingsRow
 │       └── DesignSystem/                  # 共享视觉组件
 │           ├── UBDesignTokens.swift       # 圆角、字体、颜色 token
 │           ├── AppIconSquircle.swift       # 圆角方形图标
