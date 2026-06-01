@@ -8,7 +8,7 @@ struct AboutView: View {
     @ObservedObject var store: UsageBoardStore
     @State private var isUserChecking = false
     private var strings: AppLocalization {
-        AppLocalization(language: store.activeLanguage)
+        .shared
     }
 
     private var currentVersion: String {

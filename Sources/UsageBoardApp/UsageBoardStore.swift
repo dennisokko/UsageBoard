@@ -55,6 +55,7 @@ final class UsageBoardStore: ObservableObject {
         }
         configuration = loadedConfiguration
         activeLanguage = loadedConfiguration.language
+        AppLocalization.shared = AppLocalization(language: activeLanguage)
         if didLoadConfiguration {
             try? configStore.save(configuration) // persist generated stateIDs
         }
@@ -83,8 +84,10 @@ final class UsageBoardStore: ObservableObject {
         // store is a long-lived singleton — observers are reclaimed at process exit.
     }
 
-    var displayNames: [UUID: String] {
-        PluginDisplayNames.make(for: configuration.plugins, language: activeLanguage)
+    private(set) var displayNames: [UUID: String] = [:]
+
+    private func invalidateDisplayNames() {
+        displayNames = PluginDisplayNames.make(for: configuration.plugins, language: activeLanguage)
     }
 
     var pluginsDirectoryURL: URL {
@@ -98,11 +101,17 @@ final class UsageBoardStore: ObservableObject {
         return makeSnapshot(for: plugin)
     }
 
+    /// Full save: rebuild snapshots, restart schedulers, refresh due plugins, write to disk.
     func saveConfiguration() {
         lastError = nil
         rebuildSnapshots()
         startSchedulers()
         refreshPluginsAfterConfigurationChange()
+        persistConfiguration()
+    }
+
+    /// Lightweight: only schedule a disk write (no snapshot/scheduler/refresh side effects).
+    func persistConfiguration() {
         scheduleConfigurationWrite()
     }
 
@@ -170,7 +179,9 @@ final class UsageBoardStore: ObservableObject {
             inflightRefreshTasks[id]?.cancel()
             inflightRefreshTasks.removeValue(forKey: id)
             nextRefreshAt.removeValue(forKey: id)
-            saveConfiguration()
+            rebuildSnapshots()
+            startSchedulers()
+            persistConfiguration()
             return
         }
 
@@ -222,7 +233,8 @@ final class UsageBoardStore: ObservableObject {
         inflightRefreshTasks.removeValue(forKey: id)
         schedulerKeys.removeValue(forKey: id)
         nextRefreshAt.removeValue(forKey: id)
-        saveConfiguration()
+        invalidateDisplayNames()
+        persistConfiguration()
     }
 
     func refreshAll() {
@@ -247,7 +259,12 @@ final class UsageBoardStore: ObservableObject {
             return
         }
         let refreshInterval = max(plugin.refreshIntervalSeconds, 5)
-        guard force || stateStore.needsRefresh(stateID: plugin.stateID, intervalSeconds: refreshInterval) else { return }
+        if !force {
+            if let updatedAt = snapshots[plugin.id]?.updatedAt,
+               Date().timeIntervalSince(updatedAt) <= Double(refreshInterval) {
+                return
+            }
+        }
 
         snapshots[plugin.id] = makeSnapshot(
             for: plugin,
@@ -379,7 +396,8 @@ final class UsageBoardStore: ObservableObject {
         return nil
     }
 
-    private func rebuildSnapshots() {
+    func rebuildSnapshots() {
+        invalidateDisplayNames()
         var next: [UUID: PluginSnapshot] = [:]
         for plugin in configuration.plugins {
             next[plugin.id] = snapshots[plugin.id] ?? makeSnapshot(for: plugin)
@@ -417,12 +435,12 @@ final class UsageBoardStore: ObservableObject {
             let id = plugin.id
             let interval = max(plugin.refreshIntervalSeconds, 5)
             let newKey = SchedulerKey(refreshIntervalSeconds: interval, stateID: plugin.stateID)
-            let cached = stateStore.load(stateID: plugin.stateID)
+            let cachedUpdatedAt = snapshots[id]?.updatedAt
 
             // Keep an already-running scheduler if its key is unchanged.
             if refreshTasks[id] != nil, schedulerKeys[id] == newKey {
                 if nextRefreshAt[id] == nil {
-                    nextRefreshAt[id] = scheduledRefreshDate(cached: cached, interval: interval)
+                    nextRefreshAt[id] = scheduledRefreshDate(updatedAt: cachedUpdatedAt, interval: interval)
                 }
                 continue
             }
@@ -430,10 +448,10 @@ final class UsageBoardStore: ObservableObject {
             // Replace stale scheduler (interval or stateID changed) or start new one.
             refreshTasks[id]?.cancel()
             schedulerKeys[id] = newKey
-            let initialRefreshAt = scheduledRefreshDate(cached: cached, interval: interval)
+            let initialRefreshAt = scheduledRefreshDate(updatedAt: cachedUpdatedAt, interval: interval)
             nextRefreshAt[id] = initialRefreshAt
 
-            let hasCached = cached != nil
+            let hasCached = cachedUpdatedAt != nil
             if !hasCached {
                 snapshots[id] = makeSnapshot(for: plugin, state: .loading)
             }
@@ -458,16 +476,16 @@ final class UsageBoardStore: ObservableObject {
         }
     }
 
-    private func scheduledRefreshDate(cached: PluginCachedState?, interval: Int, now: Date = Date()) -> Date {
-        guard let cached else { return now }
-        let due = cached.updatedAt.addingTimeInterval(TimeInterval(interval))
+    private func scheduledRefreshDate(updatedAt: Date?, interval: Int, now: Date = Date()) -> Date {
+        guard let updatedAt else { return now }
+        let due = updatedAt.addingTimeInterval(TimeInterval(interval))
         return due > now ? due : now
     }
 
     private func refreshPluginsAfterConfigurationChange() {
         for plugin in configuration.plugins where plugin.enabled && isPluginReadyToRun(plugin) {
             let snapshot = snapshots[plugin.id]
-            let hasCached = stateStore.load(stateID: plugin.stateID) != nil
+            let hasCached = snapshot?.updatedAt != nil
             let shouldRefresh = !hasCached || snapshot?.state == .loading || isFailed(snapshot?.state)
             if shouldRefresh {
                 refresh(pluginID: plugin.id, force: true)
@@ -577,7 +595,7 @@ final class UsageBoardStore: ObservableObject {
                 try SMAppService.mainApp.unregister()
             }
             configuration.launchAtLogin = enabled
-            saveConfiguration()
+            persistConfiguration()
         } catch {
             lastError = storeMessage(.launchAtLoginFailed(error.localizedDescription))
             objectWillChange.send()

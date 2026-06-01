@@ -2,6 +2,8 @@ import Foundation
 import UsageBoardCore
 
 struct AppLocalization {
+    @MainActor static var shared = AppLocalization(language: .zhHans)
+
     var language: AppLanguage
 
     func displayModeName(_ mode: DisplayMode) -> String {

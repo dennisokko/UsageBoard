@@ -12,7 +12,7 @@ struct PluginSettingsCard: View {
     var onRemove: () -> Void
 
     private var strings: AppLocalization {
-        AppLocalization(language: language)
+        .shared
     }
 
     var body: some View {

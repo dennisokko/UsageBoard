@@ -11,7 +11,7 @@ struct PluginSettingsView: View {
     @State private var draft: PluginConfiguration?
     @State private var searchText = ""
     private var strings: AppLocalization {
-        AppLocalization(language: store.activeLanguage)
+        .shared
     }
 
     private var hasChanges: Bool {
@@ -70,7 +70,10 @@ struct PluginSettingsView: View {
                                     plugins: $store.configuration.plugins,
                                     targetID: plugin.id,
                                     draggingID: $draggingPluginID,
-                                    onDropCompleted: { store.saveConfiguration() }
+                                    onDropCompleted: {
+                                        store.rebuildSnapshots()
+                                        store.persistConfiguration()
+                                    }
                                 ))
                         }
                     }

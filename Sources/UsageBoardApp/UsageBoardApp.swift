@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             .frame(minWidth: 800, minHeight: 480)
         let hostingController = NSHostingController(rootView: settingsView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = AppLocalization(language: store.activeLanguage).text(.settingsWindowTitle)
+        window.title = AppLocalization.shared.text(.settingsWindowTitle)
         window.setContentSize(NSSize(width: 800, height: 520))
         window.minSize = NSSize(width: 800, height: 480)
         window.styleMask = [.titled, .closable, .resizable, .miniaturizable]

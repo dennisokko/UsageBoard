@@ -7,7 +7,7 @@ import UsageBoardCore
 struct GeneralSettingsView: View {
     @ObservedObject var store: UsageBoardStore
     private var strings: AppLocalization {
-        AppLocalization(language: store.activeLanguage)
+        .shared
     }
 
     var body: some View {
@@ -31,7 +31,7 @@ struct GeneralSettingsView: View {
                 .labelsHidden()
                 .frame(width: 120, alignment: .leading)
                 .onChange(of: store.configuration.overviewDisplayMode) { _ in
-                    store.saveConfiguration()
+                    store.persistConfiguration()
                 }
             }
 
@@ -44,7 +44,7 @@ struct GeneralSettingsView: View {
                 .labelsHidden()
                 .frame(width: 120, alignment: .leading)
                 .onChange(of: store.configuration.language) { newValue in
-                    store.saveConfiguration()
+                    store.persistConfiguration()
                     if newValue != store.activeLanguage {
                         showRestartRequiredAlert()
                     }

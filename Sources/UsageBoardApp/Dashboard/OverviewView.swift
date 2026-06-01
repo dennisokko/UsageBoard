@@ -55,7 +55,7 @@ struct QuitButton: View {
     var iconSize: CGFloat = 13
     var buttonSize: CGFloat = 24
     private var strings: AppLocalization {
-        AppLocalization(language: language)
+        .shared
     }
 
     var body: some View {

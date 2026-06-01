@@ -8,7 +8,7 @@ struct PluginGroupView: View {
     var onRefresh: (() -> Void)?
     @State private var isChartExpanded = false
     private var strings: AppLocalization {
-        AppLocalization(language: language)
+        .shared
     }
 
     var body: some View {

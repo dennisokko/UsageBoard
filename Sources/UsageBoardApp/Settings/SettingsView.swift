@@ -27,7 +27,7 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .general
 
     private var strings: AppLocalization {
-        AppLocalization(language: store.activeLanguage)
+        .shared
     }
 
     var body: some View {

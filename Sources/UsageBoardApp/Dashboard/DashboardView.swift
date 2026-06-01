@@ -13,8 +13,12 @@ struct DashboardView: View {
         store.configuration.plugins.filter(\.enabled)
     }
 
+    private var enabledPluginIDs: [UUID] {
+        store.configuration.plugins.compactMap { $0.enabled ? $0.id : nil }
+    }
+
     private var strings: AppLocalization {
-        AppLocalization(language: store.activeLanguage)
+        .shared
     }
 
     var body: some View {
@@ -71,7 +75,7 @@ struct DashboardView: View {
                             .onChange(of: store.selectedTabID) { _ in
                                 scrollToSelectedTab(with: proxy)
                             }
-                            .onChange(of: enabledPlugins.map(\.id)) { _ in
+                            .onChange(of: enabledPluginIDs) { _ in
                                 scrollToSelectedTab(with: proxy)
                             }
                         }
@@ -93,7 +97,7 @@ struct DashboardView: View {
         .onAppear {
             ensureSelectedTab()
         }
-        .onChange(of: enabledPlugins.map(\.id)) { _ in
+        .onChange(of: enabledPluginIDs) { _ in
             ensureSelectedTab()
         }
         .toolbar {
@@ -140,7 +144,7 @@ struct DashboardView: View {
 struct EmptyPluginsView: View {
     var language: AppLanguage
     private var strings: AppLocalization {
-        AppLocalization(language: language)
+        .shared
     }
 
     var body: some View {

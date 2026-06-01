@@ -6,7 +6,7 @@ struct TokenUsageChartView: View {
     var language: AppLanguage
     @State private var selectedSeries: String?
     private var strings: AppLocalization {
-        AppLocalization(language: language)
+        .shared
     }
 
     private var series: [TokenChartSeries] {
