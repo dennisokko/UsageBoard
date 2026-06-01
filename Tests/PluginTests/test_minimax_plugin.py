@@ -37,18 +37,27 @@ def run_plugin_with_interpreter(interpreter: Path) -> dict:
         "base_resp": {"status_code": 0},
         "model_remains": [
             {
-                "model_name": "MiniMax-M*",
-                "current_interval_usage_count": 0,
-                "current_interval_total_count": 1500,
-                "current_weekly_usage_count": 3,
-                "current_weekly_total_count": 15000,
+                "model_name": "general",
                 "start_time": 0,
                 "end_time": 5 * 60 * 60 * 1000,
+                "remains_time": 1,
                 "weekly_start_time": 0,
                 "weekly_end_time": 7 * 24 * 60 * 60 * 1000,
-                "remains_time": 1,
                 "weekly_remains_time": 2,
-            }
+                "current_interval_remaining_percent": 98,
+                "current_weekly_remaining_percent": 99,
+            },
+            {
+                "model_name": "video",
+                "start_time": 0,
+                "end_time": 24 * 60 * 60 * 1000,
+                "remains_time": 3,
+                "weekly_start_time": 0,
+                "weekly_end_time": 7 * 24 * 60 * 60 * 1000,
+                "weekly_remains_time": 4,
+                "current_interval_remaining_percent": 100,
+                "current_weekly_remaining_percent": 100,
+            },
         ],
     }
     wrapper = textwrap.dedent(
@@ -109,12 +118,15 @@ class TestMiniMaxInterpreterCompatibility(unittest.TestCase):
             with self.subTest(interpreter=str(interpreter)):
                 output = run_plugin_with_interpreter(interpreter)
                 self.assertEqual(output["schemaVersion"], 1)
-                self.assertEqual(output["badge"], "Starter")
-                self.assertEqual(len(output["items"]), 2)
-                self.assertEqual(output["items"][0]["displayStyle"], "ratio")
-                self.assertEqual(output["items"][0]["status"], "normal")
-                self.assertIn(".", output["items"][0]["resetAt"])
-                self.assertTrue(output["items"][0]["resetAt"].endswith("Z"))
+                self.assertEqual(output["badge"], "Plus")
+                self.assertEqual(len(output["items"]), 4)
+                first = output["items"][0]
+                self.assertEqual(first["displayStyle"], "percent")
+                self.assertEqual(first["limit"], 100)
+                self.assertEqual(first["used"], 2)
+                self.assertEqual(first["status"], "normal")
+                self.assertIn(".", first["resetAt"])
+                self.assertTrue(first["resetAt"].endswith("Z"))
 
 
 if __name__ == "__main__":
