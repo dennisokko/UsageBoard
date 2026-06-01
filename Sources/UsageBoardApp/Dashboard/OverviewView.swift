@@ -2,6 +2,19 @@ import AppKit
 import SwiftUI
 import UsageBoardCore
 
+// MARK: - Environment Key
+
+private struct OpenSettingsKey: EnvironmentKey {
+    nonisolated(unsafe) static let defaultValue: () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var openSettings: () -> Void {
+        get { self[OpenSettingsKey.self] }
+        set { self[OpenSettingsKey.self] = newValue }
+    }
+}
+
 struct OverviewView: View {
     @ObservedObject var store: UsageBoardStore
 
@@ -35,12 +48,13 @@ struct OverviewView: View {
 }
 
 struct SettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
     var iconSize: CGFloat = 13
     var buttonSize: CGFloat = 24
 
     var body: some View {
         Button {
-            AppDelegate.shared?.openSettings()
+            openSettings()
         } label: {
             Image(systemName: "gear")
                 .font(.system(size: iconSize, weight: .medium))

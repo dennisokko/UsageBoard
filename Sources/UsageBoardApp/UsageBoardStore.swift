@@ -16,10 +16,10 @@ final class UsageBoardStore: ObservableObject {
 
     let activeLanguage: AppLanguage
 
-    private let configStore: ConfigStore
-    private let stateStore: PluginStateStore
-    private let executor: PluginExecutor
-    private let updateChecker: UpdateChecker
+    private let configStore: any ConfigStoring
+    private let stateStore: any PluginStateStoring
+    private let executor: any PluginExecuting
+    private let updateChecker: any UpdateChecking
     private var refreshTasks: [UUID: Task<Void, Never>] = [:]
     private var inflightRefreshTasks: [UUID: Task<Void, Never>] = [:]
     private var schedulerKeys: [UUID: SchedulerKey] = [:]
@@ -35,10 +35,10 @@ final class UsageBoardStore: ObservableObject {
     }
 
     init(
-        configStore: ConfigStore = ConfigStore(),
-        stateStore: PluginStateStore = PluginStateStore(),
-        executor: PluginExecutor = PluginExecutor(),
-        updateChecker: UpdateChecker = UpdateChecker()
+        configStore: any ConfigStoring = ConfigStore(),
+        stateStore: any PluginStateStoring = PluginStateStore(),
+        executor: any PluginExecuting = PluginExecutor(),
+        updateChecker: any UpdateChecking = UpdateChecker()
     ) {
         self.configStore = configStore
         self.stateStore = stateStore

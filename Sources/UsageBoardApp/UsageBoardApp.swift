@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         newPopover.appearance = NSApp.effectiveAppearance
         let hostingController = NSHostingController(
             rootView: OverviewView(store: store)
+                .environment(\.openSettings) { [weak self] in self?.openSettings() }
                 .frame(width: 380)
                 .background(Color(nsColor: .windowBackgroundColor))
         )
