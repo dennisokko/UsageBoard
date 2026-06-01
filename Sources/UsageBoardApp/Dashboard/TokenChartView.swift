@@ -1,0 +1,215 @@
+import SwiftUI
+import UsageBoardCore
+
+struct TokenUsageChartView: View {
+    var chart: PluginChart
+    var language: AppLanguage
+    @State private var selectedSeries: String?
+    private var strings: AppLocalization {
+        AppLocalization(language: language)
+    }
+
+    private var series: [TokenChartSeries] {
+        var output = [
+            TokenChartSeries(
+                name: strings.text(.totalTokenUsage),
+                color: .blue,
+                values: chart.buckets.map(\.total)
+            )
+        ]
+        output.append(contentsOf: modelSummaries.map { summary in
+            TokenChartSeries(
+                name: strings.usageSuffix(for: summary.name),
+                color: summary.color,
+                values: chart.buckets.map { bucket in
+                    bucket.segments.first(where: { $0.model == summary.name })?.tokens ?? 0
+                }
+            )
+        })
+        return output
+    }
+
+    private var visibleSeries: [TokenChartSeries] {
+        let filtered = series.filter { $0.values.contains(where: { $0 > 0 }) }
+        guard let selectedSeries else { return filtered }
+        let selected = filtered.filter { $0.name == selectedSeries }
+        return selected.isEmpty ? filtered : selected
+    }
+
+    private var modelSummaries: [TokenModelSummary] {
+        var totals: [String: Double] = [:]
+        for bucket in chart.buckets {
+            for segment in bucket.segments {
+                totals[segment.model, default: 0] += max(segment.tokens, 0)
+            }
+        }
+        return totals
+            .filter { $0.key != "总计" }
+            .sorted(by: { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key < rhs.key
+                }
+                return lhs.value > rhs.value
+            })
+            .enumerated()
+            .map { index, element in
+                TokenModelSummary(name: element.key, total: element.value, color: modelColor(at: index))
+            }
+    }
+
+    private var totalTokens: Double {
+        chart.buckets.reduce(0) { $0 + $1.total }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if chart.buckets.contains(where: { !$0.segments.isEmpty }) {
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    Button {
+                        selectedSeries = selectedSeries == strings.text(.totalTokenUsage) ? nil : strings.text(.totalTokenUsage)
+                    } label: {
+                        TokenMetricView(
+                            title: strings.text(.totalTokenUsage),
+                            value: totalTokens,
+                            color: .blue,
+                            isSelected: selectedSeries == strings.text(.totalTokenUsage)
+                        )
+                        .contentShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .help(selectedSeries == strings.text(.totalTokenUsage) ? strings.text(.showAllLines) : strings.text(.showOnlyTotalUsage))
+
+                    ForEach(modelSummaries) { summary in
+                        Button {
+                            let seriesName = strings.usageSuffix(for: summary.name)
+                            selectedSeries = selectedSeries == seriesName ? nil : seriesName
+                        } label: {
+                            TokenMetricView(
+                                title: strings.usageSuffix(for: summary.name),
+                                value: summary.total,
+                                color: summary.color,
+                                isSelected: selectedSeries == strings.usageSuffix(for: summary.name)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        .buttonStyle(.plain)
+                        .help(selectedSeries == strings.usageSuffix(for: summary.name) ? strings.text(.showAllLines) : strings.showOnlyUsageSuffix(for: summary.name))
+                    }
+                }
+
+                GeometryReader { viewport in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        let resolvedWidth = resolvedChartWidth(for: viewport.size.width)
+                        TokenLineChartPlot(
+                            buckets: chart.buckets,
+                            series: visibleSeries,
+                            maxValue: max(visibleSeries.flatMap(\.values).max() ?? 0, 1),
+                            visibleWidth: viewport.size.width
+                        )
+                        .frame(width: resolvedWidth, height: 170)
+                    }
+                    .coordinateSpace(name: "TokenChartScroll")
+                }
+                .frame(height: 170)
+            } else {
+                Text(chart.message ?? strings.text(.noStatsData))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private func resolvedChartWidth(for visibleWidth: CGFloat) -> CGFloat {
+        if chart.bucketUnit == "day" {
+            return max(visibleWidth, 320)
+        }
+        let step: CGFloat = 30
+        return max(visibleWidth, CGFloat(max(chart.buckets.count - 1, 1)) * step + 110)
+    }
+
+    private func modelColor(at index: Int) -> Color {
+        let palette: [Color] = [
+            .green,
+            .orange,
+            .purple,
+            .pink,
+            .teal,
+            .red,
+            .indigo,
+            .mint,
+            .brown,
+            .cyan,
+            .yellow,
+        ]
+        if index < palette.count {
+            return palette[index]
+        }
+
+        let hue = Double((index - palette.count) % 24) / 24.0
+        let brightness = 0.62 + Double((index / 24) % 3) * 0.12
+        return Color(hue: hue, saturation: 0.72, brightness: min(brightness, 0.86))
+    }
+}
+
+struct TokenModelSummary: Identifiable {
+    var name: String
+    var total: Double
+    var color: Color
+
+    var id: String { name }
+}
+
+struct TokenChartSeries: Identifiable {
+    var name: String
+    var color: Color
+    var values: [Double]
+
+    var id: String { name }
+}
+
+struct TokenMetricView: View {
+    var title: String
+    var value: Double
+    var color: Color
+    var isSelected: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 7, height: 7)
+                Text(title)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(formattedTokenNumber(value).number)
+                    .font(UB.Font.summaryBig)
+                    .tracking(-0.6)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(formattedTokenNumber(value).unit)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isSelected ? color.opacity(0.10) : .clear)
+        )
+    }
+}
