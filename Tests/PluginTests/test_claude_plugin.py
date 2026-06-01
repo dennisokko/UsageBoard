@@ -111,32 +111,39 @@ class TestFailureFormat(unittest.TestCase):
 
 
 class TestBuildItemsFromOauth(unittest.TestCase):
-    """OAuth usage payload should produce UsageBoard items for each returned limit window."""
+    """OAuth usage payload should produce UsageBoard items for five_hour and seven_day."""
 
-    def test_includes_claude_design_weekly_usage_when_present(self):
+    def test_produces_two_items_with_correct_fields(self):
         payload = {
             "five_hour": {"utilization": 12.34, "resets_at": "2026-05-09T10:00:00Z"},
             "seven_day": {"utilization": 56.78, "resets_at": "2026-05-10T00:00:00Z"},
-            "seven_day_omelette": {"utilization": 91.2, "resets_at": "2026-05-11T00:00:00Z"},
         }
 
         translate = plugin._translate("zh-Hans")
         items = plugin.build_items_from_oauth(payload, "zh-Hans", translate)
-        design_item = next(item for item in items if item["id"] == "claude-design-seven-day")
 
-        self.assertEqual(len(items), 3)
-        self.assertEqual(design_item["name"], "Design 周用量")
-        self.assertEqual(design_item["used"], 91.2)
-        self.assertEqual(design_item["limit"], 100)
-        self.assertEqual(design_item["displayStyle"], "percent")
-        self.assertEqual(design_item["resetAt"], "2026-05-11T00:00:00Z")
-        self.assertEqual(design_item["status"], "critical")
-        self.assertEqual(design_item["color"], "red")
+        self.assertEqual(len(items), 2)
+        self.assertEqual([item["id"] for item in items], ["claude-five-hour", "claude-seven-day"])
 
-    def test_omits_claude_design_weekly_usage_when_absent(self):
+        fh = items[0]
+        self.assertEqual(fh["name"], "5 小时用量")
+        self.assertEqual(fh["used"], 12.3)
+        self.assertEqual(fh["limit"], 100)
+        self.assertEqual(fh["displayStyle"], "percent")
+        self.assertEqual(fh["resetAt"], "2026-05-09T10:00:00Z")
+        self.assertEqual(fh["status"], "normal")
+        self.assertEqual(fh["color"], "blue")
+
+        sd = items[1]
+        self.assertEqual(sd["name"], "周用量")
+        self.assertEqual(sd["used"], 56.8)
+        self.assertEqual(sd["color"], "blue")
+
+    def test_ignores_unknown_fields_in_payload(self):
         payload = {
-            "five_hour": {"utilization": 12.34, "resets_at": "2026-05-09T10:00:00Z"},
-            "seven_day": {"utilization": 56.78, "resets_at": "2026-05-10T00:00:00Z"},
+            "five_hour": {"utilization": 50, "resets_at": "2026-05-09T10:00:00Z"},
+            "seven_day": {"utilization": 80, "resets_at": "2026-05-10T00:00:00Z"},
+            "seven_day_omelette": {"utilization": 91.2, "resets_at": "2026-05-11T00:00:00Z"},
         }
 
         translate = plugin._translate("en")
