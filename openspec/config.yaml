@@ -1,0 +1,31 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+  proposal:
+    - "If this change involves architecture decisions (e.g., API contract changes, DB schema changes, new dependencies, style changes), also produce an `adr.md` in the change directory following the format in `~/.claude/templates/adr.md`. For pure bugfixes or refactoring, skip ADR."
+
+      - "Before writing the proposal body, fill in the Hypothesis section at the top (Belief/Outcome Signal/Guardrail Check/Appetite). Reference: `~/.claude/templates/proposal.md`."
+
+  explore:
+    - "When starting a new milestone or major direction change, before diving into technical exploration, first run Lean Canvas direction validation. Use template at `~/.claude/templates/lean-canvas.md`. Output to `openspec/PROJECT.md` sections: North Star Metric, Driver Metrics, Top 3 Riskiest Assumptions. Read existing PROJECT.md first to understand current project state."
+
+  apply:
+    - "After implementation and before archive: (1) run Signal verification — re-read proposal Hypothesis, check each Signal against actual results, producing evidence-level assertions. (2) generate REFLECTION.md (Surprise/Pattern/Improvement) following `~/.claude/templates/reflection.md`. Trivial changes (bugfix <10 lines, typo) may skip REFLECTION.md."
