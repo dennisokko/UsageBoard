@@ -364,33 +364,20 @@ bash scripts/build.sh
 
 ## Release
 
-Generate and upload a new version:
+Use the automated publish script (requires `gh`: `brew install gh && gh auth login`):
 
 ```bash
-bash scripts/release.sh
+bash scripts/publish.sh        # auto-increment patch version
+bash scripts/publish.sh 0.2.0  # specify version
 ```
 
-Specify a version:
+The script handles: build → sign → zip → tag → create GitHub Release → update homebrew cask.
+
+For local build only:
 
 ```bash
-bash scripts/release.sh 0.1.20
+bash scripts/build.sh
 ```
-
-The release script:
-
-1. Reads the current version from `dist/UsageBoard.app/Contents/Info.plist`.
-2. Generates a new version number.
-3. Auto-generates release notes from commits since the last release tag (or accepts manual notes as the second argument).
-4. Builds a release.
-5. Copies the binary and bundled plugins.
-6. Injects the update check URL into Info.plist via PlistBuddy.
-7. Re-signs and verifies the app.
-8. Generates `UsageBoard-<version>.zip`.
-9. Generates `version.json`.
-10. Uploads to the configured server path.
-11. Cleans up old remote zips.
-
-Current release artifacts:
 
 - `dist/UsageBoard-0.1.20.zip`
 - `dist/version.json`

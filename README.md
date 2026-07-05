@@ -371,36 +371,20 @@ bash scripts/build.sh
 
 ## 发布
 
-生成并上传新版本：
+使用自动化发布脚本（需先安装 `gh`：`brew install gh && gh auth login`）：
 
 ```bash
-bash scripts/release.sh
+bash scripts/publish.sh        # 自动升 patch 版本
+bash scripts/publish.sh 0.2.0  # 指定版本
 ```
 
-指定版本：
+脚本会自动完成：构建 → 签名 → 打包 zip → 打 tag → 创建 GitHub Release → 更新 homebrew cask。
+
+如仅需本地构建不发布：
 
 ```bash
-bash scripts/release.sh 0.1.6
+bash scripts/build.sh
 ```
-
-发布脚本会：
-
-1. 从 `dist/UsageBoard.app/Contents/Info.plist` 读取当前版本。
-2. 生成新版本号。
-3. 自动从上个 release tag 到 HEAD 的提交生成更新说明（也可通过第二个参数手动传入）。
-4. 构建 release。
-5. 复制二进制和内置插件。
-6. 通过 PlistBuddy 向 Info.plist 注入更新检查 URL。
-7. 重新签名并验证 app。
-8. 生成 `UsageBoard-<version>.zip`。
-9. 生成 `version.json`。
-10. 上传到脚本中配置的服务器路径。
-11. 清理远端旧 zip。
-
-当前发布产物示例：
-
-- `dist/UsageBoard-0.1.20.zip`
-- `dist/version.json`
 
 ## 项目结构
 
