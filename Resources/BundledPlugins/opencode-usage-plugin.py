@@ -144,7 +144,7 @@ def reset_from_seconds(seconds: float) -> str | None:
 def fetch_dashboard(workspace_id: str, auth_cookie: str) -> str:
     url = DASHBOARD_URL.format(workspace_id=workspace_id)
     headers = dict(REQUEST_HEADERS)
-    headers["Cookie"] = f"__session={auth_cookie}"
+    headers["Cookie"] = f"auth={auth_cookie}"
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=_DASHBOARD_SCRAPE_TIMEOUT) as resp:
         return resp.read().decode("utf-8")
@@ -163,7 +163,7 @@ _RE_RAW_OBJECT = re.compile(
 )
 
 _RE_WINDOW = re.compile(
-    r"(rollingUsage|weeklyUsage|monthlyUsage)\s*:\s*\{([^}]+)\}",
+    r"(rollingUsage|weeklyUsage|monthlyUsage)\s*:\s*(?:\$R\[\d+\]=)?\{([^}]+)\}",
 )
 
 _RE_FIELD = re.compile(r"(\w+)\s*:\s*([\d.]+)")

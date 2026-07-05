@@ -61,6 +61,7 @@ UsageBoard is a native macOS menu bar app that aggregates and displays usage quo
 | MiniMax | `minimax-usage-plugin.py` | Query MiniMax Coding Plan usage |
 | DeepSeek | `deepseek-usage-plugin.py` | Query DeepSeek account balance |
 | Tavily | `tavily-usage-plugin.py` | Query Tavily Search monthly usage |
+| OpenCode Go | `opencode-usage-plugin.py` | Query OpenCode Go subscription usage and stats |
 
 Bundled plugin source files are in [Resources/BundledPlugins](Resources/BundledPlugins). After packaging, they reside in the app bundle at `Contents/Resources/Plugins/`.
 
@@ -305,8 +306,14 @@ The bundled Zhipu, Claude, and Codex plugins provide a `STAT_PERIOD` parameter s
 Install via Homebrew:
 
 ```bash
-brew tap marsmay/usageboard
+brew tap dennisokko/usageboard
 brew install --cask usageboard
+```
+
+On first launch, macOS may show "unidentified developer". Go to "System Settings → Privacy & Security" and click "Open Anyway", or run:
+
+```bash
+xattr -cr /Applications/UsageBoard.app
 ```
 
 On first launch, macOS may show a "cannot verify developer" warning. Open **System Settings → Privacy & Security** and click **Open Anyway**, or run:
