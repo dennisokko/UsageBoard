@@ -11,7 +11,6 @@ TAP_DIR="$PROJECT_DIR/../homebrew-usageboard"
 # --- Prerequisites ---
 if ! command -v gh &>/dev/null; then
     echo "需要 gh CLI。安装: brew install gh"
-    echo "然后: gh auth login"
     exit 1
 fi
 if ! gh auth status &>/dev/null; then
@@ -19,9 +18,11 @@ if ! gh auth status &>/dev/null; then
     exit 1
 fi
 
-# --- Version ---
-CURRENT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" 2>/dev/null || echo "0.0.0")
-if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+# --- Version from latest git tag ---
+git fetch --tags -q 2>/dev/null || true
+LAST_TAG=$(git tag --sort=-version:refname | head -1)
+CURRENT_VERSION="${LAST_TAG#v}"  # strip "v" prefix
+if [ -z "$CURRENT_VERSION" ]; then
     CURRENT_VERSION="0.0.0"
 fi
 
@@ -35,8 +36,6 @@ fi
 echo "版本: $CURRENT_VERSION → $NEW_VERSION"
 
 # --- Release notes ---
-git fetch --tags -q 2>/dev/null || true
-LAST_TAG=$(git tag --sort=-version:refname | head -1)
 if [ -n "$LAST_TAG" ]; then
     NOTES=$(git log "${LAST_TAG}..HEAD" --format="- %s" 2>/dev/null || echo "")
 else
@@ -45,8 +44,26 @@ fi
 
 # --- Build ---
 echo "构建 release..."
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$PLIST" 2>/dev/null \
-    || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $NEW_VERSION" "$PLIST"
+mkdir -p "$APP_BUNDLE/Contents"
+
+if [ ! -f "$PLIST" ]; then
+    /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string zh_CN" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ltd.may.UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleInfoDictionaryVersion string 6.0" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleName string UsageBoard" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $NEW_VERSION" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :LSApplicationCategoryType string 'public.app-category.productivity'" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 13.0" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :LSUIElement string true" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST"
+    /usr/libexec/PlistBuddy -c "Add :NSPrincipalClass string NSApplication" "$PLIST"
+else
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW_VERSION" "$PLIST"
+fi
 
 swift build -c release
 
@@ -72,8 +89,6 @@ echo "已生成: $DIST_DIR/$ZIP_NAME"
 
 # --- Tag & push ---
 echo "打 tag v${NEW_VERSION}..."
-git add "$PLIST"
-git commit -m "Release v${NEW_VERSION}" 2>/dev/null || true
 git tag "v${NEW_VERSION}"
 git push origin "v${NEW_VERSION}"
 
